@@ -1,0 +1,8 @@
+lxml
+openpyxl
+gdown
+matplotlib
+plotly
+streamlit_option_menu 
+xlsxwriter
+fuzzywuzzy
