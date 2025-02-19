@@ -14,9 +14,9 @@ page_7 = st.Page("Pages/Tools/ABO-DA.py", title="Automate Breakdown Ojol")
 page_8 = st.Page("Pages/Dashboard/Weight Average (9901).py", title="Weight Average 99.01")
 
 pg = st.navigation({'Dashboard':[
-                    page_1, page_4, page_5],
+                    page_1, page_2, page_3, page_4, page_5],
                    'Tools':[
-                    page_6,page_7
+                    page_6,page_7,page_8
                    ]},expanded=True)
 pg.run()
 
