@@ -172,7 +172,7 @@ with col[0]:
 with col[1]:
     cab = st.selectbox("NAMA CABANG:", ['All'] + sorted(df_9901['Nama Cabang'].unique().tolist()), index=0, on_change=reset_button_state)
 with col[2]:
-    kategori_barang = st.selectbox("KATEGORI BARANG:", ['All'] + sorted(df_9901['Kategori Barang'].unique().tolist()), index=sorted(df_9901['Kategori Barang'].unique().tolist()).index('10.FOOD [RM] - COM')+1, on_change=reset_button_state)
+    kategori_barang = st.selectbox("KATEGORI BARANG:", ['All'] + sorted(df_9901['Kategori Barang'].unique().tolist()), index=sorted(df_9901['Kategori Barang'].unique().tolist()).index('FOOD [RM] - COM')+1, on_change=reset_button_state)
 
 col = st.columns(3)
 with col[0]:
