@@ -9,7 +9,7 @@ page_4 = st.Page("Pages/Dashboard/Analisa Harga Barang.py", title="Analisa Harga
 page_5 = st.Page("Pages/Dashboard/Selisih Ojol.py", title="Selisih Ojol")
 page_9 = st.Page("Pages/Dashboard/Test.py", title="(Maintenance)")
 
-page_6 = st.Page("Pages/Tools/GIS-Cleaning & Rekap SCM.py", title="GIS Cleaning & Rekap SCM")
+page_6 = st.Page("Pages/Tools/Data Cleaning.py", title="Data Cleaning")
 page_7 = st.Page("Pages/Tools/ABO-DA.py", title="Automate Breakdown Ojol")
 page_8 = st.Page("Pages/Dashboard/Weight Average (9901).py", title="Weight Average 99.01")
 

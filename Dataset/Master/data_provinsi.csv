@@ -27,7 +27,7 @@ TBNBAS,Jawa Timur
 SDATEU,Jawa Timur
 SMGSET,Jawa Tengah
 SBYMEN,Jawa Timur
-NON-AKTIF,Jawa Barat
+CBNTEN,Jawa Barat
 BDGSET,Jawa Barat
 GSKSUD,Jawa Timur
 BTUSUP,Jawa Timur
@@ -130,7 +130,7 @@ CBICIB,Jawa Barat
 CKRTAR,Jawa Barat
 CPTALA,Banten
 SBYBUN,Jawa Timur
-NON-AKTIF,Jawa Barat
+SNGOTT,Jawa Barat
 SORKOP,Jawa Barat
 KWGTUP,Jawa Barat
 NPHLEM,Jawa Barat
@@ -227,7 +227,7 @@ CPTCIR,Banten
 CKGPUL,DKI Jakarta
 CPTSOE,Banten
 CBIPUN,Jawa Barat
-MKSVIL,Sulawesi Selatan
+MKSBUL,Sulawesi Selatan
 IDMPAN,Jawa Barat
 SLWBAN,Jawa Tengah
 BONIMA,Kalimantan Timur
@@ -246,8 +246,8 @@ KDINAS,Sulawesi Tenggara
 CBIBOG,Jawa Barat
 PLPAND,Sulawesi Selatan
 PREBAU,Sulawesi Selatan
-TMGSUW,Jawa Tengah
-CBICIA,Jawa Barat
+TMGJAM,Jawa Tengah
+CBIPAB,Jawa Barat
 GTOJHO,Gorontalo
 CKRSUK,Jawa Barat
 KRGLAW,Jawa Tengah
@@ -299,7 +299,13 @@ BYLWON,Jawa Tengah
 KRSPAT,Jawa Timur
 SBMSIL,Jawa Barat
 JMRSUD,Jawa Timur
-DCSMGMUR,Jawa Tengah
+BPPSOE,Kalimantan Timur
+TGRSER,Banten
+TNNLIN,Sulawesi Utara
+RKBPAN,Banten
+BRBMUR,Kalimantan Selatan
+BBSAHM,Jawa Tengah
+Depo,Jawa Tengah
 DCKYBKEB,DKI Jakarta
 DCBDGGAT,Jawa Barat
 DCMKSSUT,Sulawesi Selatan
@@ -341,7 +347,7 @@ BALI11,Bali
 BALI12,Bali
 BACAN,Bali
 BAKED,Bali
-MEDAN1,Sumatera Utara
+MEMAN,Sumatera Utara
 BANEG,Bali
 BAGIN,Bali
 MEDKAR,Sumatera Utara
@@ -360,3 +366,4 @@ DMC,Jawa Timur
 BMI,Jawa Timur
 PER,Jawa Timur
 IT,Jawa Timur
+AOL System,

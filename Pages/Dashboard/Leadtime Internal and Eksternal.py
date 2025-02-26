@@ -1112,73 +1112,112 @@ with eksternal_tab:
 
     if kat_eksternal =='RI(Date)-RI(Create)':
         st.markdown('### Kategori RI(Date)-RI(Create)')
-        st.write('PIC Responsible: Procurement')
-        st.write('Kategori Item: Logistic')
+        st.write('PIC Responsible: Resto')
+        st.write('Kategori Item: Eksternal Logistic')
         col = st.columns([1,2,1,2])
         
         with col[0]:
-            df_pie = df_eksternal2[(df_eksternal2["Tanggal PO"] >= pd.Timestamp(start_date)) & (df_eksternal2["Tanggal PO"] <= pd.Timestamp(end_date)) & (df_eksternal2['PIC Responsible']=='Logistic') 
-                     ].groupby(['Kategori RI(Date)-RI(Create)'])[['Nomor PO+RI']].nunique().reset_index()
-            create_pie_chart(df_pie, labels_column='Kategori RI(Date)-RI(Create)', values_column='Nomor PO+RI', title="OUTGOING BACKDATE")
+            df_pie = df_eksternal2[ 
+                    (df_eksternal2["Tanggal PO"] >= pd.Timestamp(start_date)) & (df_eksternal2["Tanggal PO"] <= pd.Timestamp(end_date)) & (df_eksternal2['Kategori Item']=='Eksternal Logistic')].groupby(['Kategori RI(Date)-RI(Create)'])[['Nomor PO+RI']].nunique().reset_index()
+            create_pie_chart(df_pie, labels_column='Kategori RI(Date)-RI(Create)', values_column='Nomor PO+RI', title="OUTGOING BACKDATE", key='pie__')
         with col[1]:
-            df_line = df_eksternal2[(df_eksternal2["Tanggal PO"] >= pd.Timestamp(start_date)) & (df_eksternal2["Tanggal PO"] <= pd.Timestamp(end_date)) & (df_eksternal2['PIC Responsible']=='Logistic') 
-                     & (df_eksternal2['Kategori RI(Date)-RI(Create)']=='Backdate')
-                     ].groupby(['Tanggal PO'])[['Nomor PO+RI']].nunique().reset_index()
-            df_line = df_tanggal.merge(df_line,how='left',left_on='Tanggal',right_on='Tanggal PO').fillna(0)
-            create_line_chart(df_line, x_column='Tanggal', y_column='Nomor PO+RI', title="DAILY BACKDATE")
+            df_line = df_eksternal2[(df_eksternal2["Tanggal PO"] >= pd.Timestamp(start_date)) & (df_eksternal2["Tanggal PO"] <= pd.Timestamp(end_date)) &(df_eksternal2['Kategori Item']=='Eksternal Logistic')
+                     ].groupby(['Date PO'])[['Nomor PO+RI']].nunique().reset_index().rename(columns={'Nomor PO+RI':'Total'}).merge(df_eksternal2[ 
+                      (df_eksternal2['Kategori RI(Date)-RI(Create)']=='Backdate') &(df_eksternal2["Tanggal PO"] >= pd.Timestamp(start_date)) & (df_eksternal2["Tanggal PO"] <= pd.Timestamp(end_date)) & (df_eksternal2['Kategori Item']=='Eksternal Logistic')
+                     ].groupby(['Date PO'])[['Nomor PO+RI']].nunique().reset_index(), how='left')
+            df_line['Nomor PO+RI'] = (df_line['Nomor PO+RI']/df_line['Total'])*100
+            create_line_chart(df_line, x_column='Date PO', y_column='Nomor PO+RI', title="DAILY BACKDATE",key='line__')
         with col[2]:
-            df_bar = df_eksternal2[(df_eksternal2["Tanggal PO"] >= pd.Timestamp(start_date)) & (df_eksternal2["Tanggal PO"] <= pd.Timestamp(end_date)) & (df_eksternal2['PIC Responsible']=='Logistic') 
-                     & (df_eksternal2['Kategori RI(Date)-RI(Create)']=='Backdate')].groupby(['Rute'])[['Nomor PO+RI']].nunique().reset_index()
-            create_percentage_barchart(df_bar, 'Rute', 'Nomor PO+RI')
+            df_bar = df_eksternal2[
+                     (df_eksternal2['Kategori RI(Date)-RI(Create)']=='Backdate') &(df_eksternal2["Tanggal PO"] >= pd.Timestamp(start_date)) & (df_eksternal2["Tanggal PO"] <= pd.Timestamp(end_date)) & (df_eksternal2['Kategori Item']=='Eksternal Logistic')].groupby(['Rute'])[['Nomor PO+RI']].nunique().reset_index()
+            create_percentage_barchart(df_bar, 'Rute', 'Nomor PO+RI',key='bar__')
         with col[3]:
             st.write('')
             col2 = st.columns(3)
             with col2[0]:
-                st.metric(label="Total", value="{:,.0f}".format(df_eksternal2[(df_eksternal2["Tanggal PO"] >= pd.Timestamp(start_date)) & (df_eksternal2["Tanggal PO"] <= pd.Timestamp(end_date)) & (df_eksternal2['PIC Responsible']=='Logistic') 
-                    ]['Nomor PO+RI'].nunique()), delta=None)
+                st.metric(label="Total", value="{:,.0f}".format(df_eksternal2[ (df_eksternal2['PIC Responsible']=='Logistic') 
+                     &(df_eksternal2["Tanggal PO"] >= pd.Timestamp(start_date)) & (df_eksternal2["Tanggal PO"] <= pd.Timestamp(end_date)) & (df_eksternal2['Kategori Item']=='Eksternal Logistic')]['Nomor PO+RI'].nunique()), delta=None)
             with col2[1]:
                 st.metric(label="On-Time", value="{:,.0f}".format(df_pie[df_pie['Kategori RI(Date)-RI(Create)']=='On-Time']['Nomor PO+RI'].values[0]), delta=None)
             with col2[2]:
                 st.metric(label="Backdate", value="{:,.0f}".format(df_pie[df_pie['Kategori RI(Date)-RI(Create)']=='Backdate']['Nomor PO+RI'].values[0]), delta=None)
             
-            st.dataframe(df_eksternal2[(df_eksternal2["Tanggal PO"] >= pd.Timestamp(start_date)) & (df_eksternal2["Tanggal PO"] <= pd.Timestamp(end_date)) & (df_eksternal2['PIC Responsible']=='Logistic') 
-                     & (df_eksternal2['Kategori RI(Date)-RI(Create)']=='Backdate')].groupby(['Rute','RI(Date)-RI(Create) Group'])[['Nomor PO+RI']].nunique().reset_index().pivot(index='Rute',columns='RI(Date)-RI(Create) Group',values='Nomor PO+RI').reset_index().merge(
-                df_eksternal2[(df_eksternal2["Tanggal PO"] >= pd.Timestamp(start_date)) & (df_eksternal2["Tanggal PO"] <= pd.Timestamp(end_date)) & (df_eksternal2['PIC Responsible']=='Logistic') 
-                     & (df_eksternal2['Kategori RI(Date)-RI(Create)']=='Backdate')].groupby(['Rute'])[['Nomor PO+RI']].nunique().reset_index().rename(columns={'Nomor PO+RI':'Total'})
+            st.dataframe(df_eksternal2[ (df_eksternal2['PIC Responsible']=='Logistic') &
+                     (df_eksternal2['Kategori RI(Date)-RI(Create)']=='Backdate') &(df_eksternal2["Tanggal PO"] >= pd.Timestamp(start_date)) & (df_eksternal2["Tanggal PO"] <= pd.Timestamp(end_date)) & (df_eksternal2['Kategori Item']=='Eksternal Logistic')].groupby(['Rute','RI(Date)-RI(Create) Group'])[['Nomor PO+RI']].nunique().reset_index().pivot(index='Rute',columns='RI(Date)-RI(Create) Group',values='Nomor PO+RI').reset_index().merge(
+                df_eksternal2[ (df_eksternal2['PIC Responsible']=='Logistic') &
+                     (df_eksternal2['Kategori RI(Date)-RI(Create)']=='Backdate') &(df_eksternal2["Tanggal PO"] >= pd.Timestamp(start_date)) & (df_eksternal2["Tanggal PO"] <= pd.Timestamp(end_date)) & (df_eksternal2['Kategori Item']=='Eksternal Logistic')].groupby(['Rute'])[['Nomor PO+RI']].nunique().reset_index().rename(columns={'Nomor PO+RI':'Total'})
                      ),
                          hide_index=True)
             
-        st.write('Kategori Item: Resto')
+        st.write('Kategori Item: Eksternal Resto')
         col = st.columns([1,2,1,2])
         
         with col[0]:
-            df_pie = df_eksternal2[(df_eksternal2["Tanggal PO"] >= pd.Timestamp(start_date)) & (df_eksternal2["Tanggal PO"] <= pd.Timestamp(end_date)) & (df_eksternal2['PIC Responsible']=='Resto') 
-                     & (df_eksternal2['Kategori Item']=='Eksternal Resto')].groupby(['Kategori RI(Date)-RI(Create)'])[['Nomor PO+RI']].nunique().reset_index()
-            create_pie_chart(df_pie, labels_column='Kategori RI(Date)-RI(Create)', values_column='Nomor PO+RI', title="OUTGOING BACKDATE")
+            df_pie = df_eksternal2[ 
+                      (df_eksternal2["Tanggal PO"] >= pd.Timestamp(start_date)) & (df_eksternal2["Tanggal PO"] <= pd.Timestamp(end_date)) &(df_eksternal2['Kategori Item']=='Eksternal Resto')].groupby(['Kategori RI(Date)-RI(Create)'])[['Nomor PO+RI']].nunique().reset_index()
+            create_pie_chart(df_pie, labels_column='Kategori RI(Date)-RI(Create)', values_column='Nomor PO+RI', title="OUTGOING BACKDATE",key='pie__1')
         with col[1]:
-            df_line = df_eksternal2[(df_eksternal2["Tanggal PO"] >= pd.Timestamp(start_date)) & (df_eksternal2["Tanggal PO"] <= pd.Timestamp(end_date)) & (df_eksternal2['PIC Responsible']=='Resto') 
-                     & (df_eksternal2['Kategori RI(Date)-RI(Create)']=='Backdate') & (df_eksternal2['Kategori Item']=='Eksternal Resto')
-                     ].groupby(['Tanggal PO'])[['Nomor PO+RI']].nunique().reset_index()
-            df_line = df_tanggal.merge(df_line,how='left',left_on='Tanggal',right_on='Tanggal PO').fillna(0)
-            create_line_chart(df_line, x_column='Tanggal', y_column='Nomor PO+RI', title="DAILY BACKDATE")
+            df_line = df_eksternal2[(df_eksternal2["Tanggal PO"] >= pd.Timestamp(start_date)) & (df_eksternal2["Tanggal PO"] <= pd.Timestamp(end_date)) &(df_eksternal2['Kategori Item']=='Eksternal Resto')
+                     ].groupby(['Date PO'])[['Nomor PO+RI']].nunique().reset_index().rename(columns={'Nomor PO+RI':'Total'}).merge(df_eksternal2[ 
+                      (df_eksternal2['Kategori RI(Date)-RI(Create)']=='Backdate') & (df_eksternal2["Tanggal PO"] >= pd.Timestamp(start_date)) & (df_eksternal2["Tanggal PO"] <= pd.Timestamp(end_date)) &(df_eksternal2['Kategori Item']=='Eksternal Resto')
+                     ].groupby(['Date PO'])[['Nomor PO+RI']].nunique().reset_index(), how='left')
+            df_line['Nomor PO+RI'] = (df_line['Nomor PO+RI']/df_line['Total'])*100
+            create_line_chart(df_line, x_column='Date PO', y_column='Nomor PO+RI', title="DAILY BACKDATE",key='line__1')
         with col[2]:
-            df_bar = df_eksternal2[(df_eksternal2["Tanggal PO"] >= pd.Timestamp(start_date)) & (df_eksternal2["Tanggal PO"] <= pd.Timestamp(end_date)) & (df_eksternal2['PIC Responsible']=='Resto') 
-                     & (df_eksternal2['Kategori RI(Date)-RI(Create)']=='Backdate') & (df_eksternal2['Kategori Item']=='Eksternal Resto')].groupby(['Rute'])[['Nomor PO+RI']].nunique().reset_index()
-            create_percentage_barchart(df_bar, 'Rute', 'Nomor PO+RI')
+            df_bar = df_eksternal2[
+                     (df_eksternal2['Kategori RI(Date)-RI(Create)']=='Backdate') & (df_eksternal2["Tanggal PO"] >= pd.Timestamp(start_date)) & (df_eksternal2["Tanggal PO"] <= pd.Timestamp(end_date)) &(df_eksternal2['Kategori Item']=='Eksternal Resto')].groupby(['Rute'])[['Nomor PO+RI']].nunique().reset_index()
+            create_percentage_barchart(df_bar, 'Rute', 'Nomor PO+RI',key='bar__1')
         with col[3]:
             st.write('')
             col2 = st.columns(3)
             with col2[0]:
-                st.metric(label="Total", value="{:,.0f}".format(df_eksternal2[(df_eksternal2["Tanggal PO"] >= pd.Timestamp(start_date)) & (df_eksternal2["Tanggal PO"] <= pd.Timestamp(end_date)) & (df_eksternal2['PIC Responsible']=='Resto') 
-                    ]['Nomor PO+RI'].nunique()), delta=None)
+                st.metric(label="Total", value="{:,.0f}".format(df_eksternal2[  
+                     (df_eksternal2["Tanggal PO"] >= pd.Timestamp(start_date)) & (df_eksternal2["Tanggal PO"] <= pd.Timestamp(end_date)) &(df_eksternal2['Kategori Item']=='Eksternal Resto')]['Nomor PO+RI'].nunique()), delta=None)
             with col2[1]:
                 st.metric(label="On-Time", value="{:,.0f}".format(df_pie[df_pie['Kategori RI(Date)-RI(Create)']=='On-Time']['Nomor PO+RI'].values[0]), delta=None)
             with col2[2]:
                 st.metric(label="Backdate", value="{:,.0f}".format(df_pie[df_pie['Kategori RI(Date)-RI(Create)']=='Backdate']['Nomor PO+RI'].values[0]), delta=None)
             
-            st.dataframe(df_eksternal2[(df_eksternal2["Tanggal PO"] >= pd.Timestamp(start_date)) & (df_eksternal2["Tanggal PO"] <= pd.Timestamp(end_date)) & (df_eksternal2['PIC Responsible']=='Resto') 
-                     & (df_eksternal2['Kategori RI(Date)-RI(Create)']=='Backdate')].groupby(['Rute','RI(Date)-RI(Create) Group'])[['Nomor PO+RI']].nunique().reset_index().pivot(index='Rute',columns='RI(Date)-RI(Create) Group',values='Nomor PO+RI').reset_index().merge(
-                df_eksternal2[(df_eksternal2["Tanggal PO"] >= pd.Timestamp(start_date)) & (df_eksternal2["Tanggal PO"] <= pd.Timestamp(end_date)) & (df_eksternal2['PIC Responsible']=='Resto') 
-                     & (df_eksternal2['Kategori RI(Date)-RI(Create)']=='Backdate')].groupby(['Rute'])[['Nomor PO+RI']].nunique().reset_index().rename(columns={'Nomor PO+RI':'Total'})
+            st.dataframe(df_eksternal2[
+                     (df_eksternal2['Kategori RI(Date)-RI(Create)']=='Backdate') & (df_eksternal2["Tanggal PO"] >= pd.Timestamp(start_date)) & (df_eksternal2["Tanggal PO"] <= pd.Timestamp(end_date)) &(df_eksternal2['Kategori Item']=='Eksternal Resto')].groupby(['Rute','RI(Date)-RI(Create) Group'])[['Nomor PO+RI']].nunique().reset_index().pivot(index='Rute',columns='RI(Date)-RI(Create) Group',values='Nomor PO+RI').reset_index().merge(
+                df_eksternal2[ 
+                     (df_eksternal2['Kategori RI(Date)-RI(Create)']=='Backdate') & (df_eksternal2["Tanggal PO"] >= pd.Timestamp(start_date)) & (df_eksternal2["Tanggal PO"] <= pd.Timestamp(end_date)) &(df_eksternal2['Kategori Item']=='Eksternal Resto')].groupby(['Rute'])[['Nomor PO+RI']].nunique().reset_index().rename(columns={'Nomor PO+RI':'Total'})
+                     ),
+                         hide_index=True)
+        
+        st.write('PIC Responsible: WH/CK')
+        st.write('Kategori Item: Internal Logistic')
+        col = st.columns([1,2,1,2])
+        
+        with col[0]:
+            df_pie = df_eksternal2[ 
+                     (df_eksternal2["Tanggal PO"] >= pd.Timestamp(start_date)) & (df_eksternal2["Tanggal PO"] <= pd.Timestamp(end_date)) & (df_eksternal2['Kategori Item']=='Internal Logistic')].groupby(['Kategori RI(Date)-RI(Create)'])[['Nomor PO+RI']].nunique().reset_index()
+            create_pie_chart(df_pie, labels_column='Kategori RI(Date)-RI(Create)', values_column='Nomor PO+RI', title="OUTGOING BACKDATE",key='pie__2')
+        with col[1]:
+            df_line = df_eksternal2[(df_eksternal2["Tanggal PO"] >= pd.Timestamp(start_date)) & (df_eksternal2["Tanggal PO"] <= pd.Timestamp(end_date)) & (df_eksternal2['Kategori Item']=='Internal Logistic')
+                     ].groupby(['Date PO'])[['Nomor PO+RI']].nunique().reset_index().rename(columns={'Nomor PO+RI':'Total'}).merge(df_eksternal2[ 
+                      (df_eksternal2['Kategori RI(Date)-RI(Create)']=='Backdate') & (df_eksternal2["Tanggal PO"] >= pd.Timestamp(start_date)) & (df_eksternal2["Tanggal PO"] <= pd.Timestamp(end_date)) & (df_eksternal2['Kategori Item']=='Internal Logistic')
+                     ].groupby(['Date PO'])[['Nomor PO+RI']].nunique().reset_index(), how='left')
+            df_line['Nomor PO+RI'] = (df_line['Nomor PO+RI']/df_line['Total'])*100
+            create_line_chart(df_line, x_column='Date PO', y_column='Nomor PO+RI', title="DAILY BACKDATE",key='line__2')
+        with col[2]:
+            df_bar = df_eksternal2[
+                     (df_eksternal2['Kategori RI(Date)-RI(Create)']=='Backdate') & (df_eksternal2["Tanggal PO"] >= pd.Timestamp(start_date)) & (df_eksternal2["Tanggal PO"] <= pd.Timestamp(end_date)) & (df_eksternal2['Kategori Item']=='Internal Logistic')].groupby(['Rute'])[['Nomor PO+RI']].nunique().reset_index()
+            create_percentage_barchart(df_bar, 'Rute', 'Nomor PO+RI', key='bar__2')
+        with col[3]:
+            st.write('')
+            col2 = st.columns(3)
+            with col2[0]:
+                st.metric(label="Total", value="{:,.0f}".format(df_eksternal2[  
+                     (df_eksternal2["Tanggal PO"] >= pd.Timestamp(start_date)) & (df_eksternal2["Tanggal PO"] <= pd.Timestamp(end_date)) & (df_eksternal2['Kategori Item']=='Internal Logistic')]['Nomor PO+RI'].nunique()), delta=None)
+            with col2[1]:
+                st.metric(label="On-Time", value="{:,.0f}".format(df_pie[df_pie['Kategori RI(Date)-RI(Create)']=='On-Time']['Nomor PO+RI'].values[0]), delta=None)
+            with col2[2]:
+                st.metric(label="Backdate", value="{:,.0f}".format(df_pie[df_pie['Kategori RI(Date)-RI(Create)']=='Backdate']['Nomor PO+RI'].values[0]), delta=None)
+            
+            st.dataframe(df_eksternal2[
+                     (df_eksternal2['Kategori RI(Date)-RI(Create)']=='Backdate') & (df_eksternal2["Tanggal PO"] >= pd.Timestamp(start_date)) & (df_eksternal2["Tanggal PO"] <= pd.Timestamp(end_date)) & (df_eksternal2['Kategori Item']=='Internal Logistic')].groupby(['Rute','RI(Date)-RI(Create) Group'])[['Nomor PO+RI']].nunique().reset_index().pivot(index='Rute',columns='RI(Date)-RI(Create) Group',values='Nomor PO+RI').reset_index().merge(
+                df_eksternal2[ 
+                     (df_eksternal2['Kategori RI(Date)-RI(Create)']=='Backdate') & (df_eksternal2["Tanggal PO"] >= pd.Timestamp(start_date)) & (df_eksternal2["Tanggal PO"] <= pd.Timestamp(end_date)) & (df_eksternal2['Kategori Item']=='Internal Logistic')].groupby(['Rute'])[['Nomor PO+RI']].nunique().reset_index().rename(columns={'Nomor PO+RI':'Total'})
                      ),
                          hide_index=True)

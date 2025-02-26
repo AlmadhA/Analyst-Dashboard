@@ -6,7 +6,11 @@ import pandas as pd
 import os
 import gdown
 import tempfile 
-
+import folium
+import requests
+import pandas as pd
+from folium import GeoJsonTooltip
+from streamlit_folium import folium_static
 
 import plotly.graph_objects as go
 import plotly.express as px
@@ -17,8 +21,10 @@ import plotly.graph_objs as go
 from urllib.request import urlopen
 import json
 
-with urlopen('https://github.com/superpikar/indonesia-geojson/blob/master/indonesia-province.json?raw=true') as response:
-    ccaa = json.load(response)
+if 'geojson_data' not in locals():
+    geojson_data = requests.get(
+    "https://github.com/superpikar/indonesia-geojson/blob/master/indonesia-province.json?raw=true"
+    ).json()
 # Fungsi untuk membuat map chart
 def create_sales_map_chart(df):
         
@@ -165,7 +171,7 @@ with col[1]:
 
 if 'df_9901' not in locals():
     df_9901 = pd.read_csv(f'Dataset/Analisa Harga Barang/{tahun}/9901.csv')
-
+    df_9901 = df_9901[~df_9901['Kode #'].astype(str).str.startswith('9')]
 col = st.columns(3)
 with col[0]:
     pic = st.selectbox("PIC:", ['All','RESTO','CP','WIP','LAINNYA'], index=1, on_change=reset_button_state)
@@ -191,7 +197,7 @@ if st.button('Show'):
 if st.session_state.button_clicked:
         df_prov = pd.read_csv('Dataset/Master/data_provinsi.csv')
         
-        db = pd.read_csv('Dataset/Master/database barang.csv')
+        db = pd.read_csv('Dataset/Master/database barang.csv',encoding='ISO-8859-1')
         db = db.drop_duplicates()
         db = pd.concat([db[db['Kode #'].astype(str).str.startswith('1')].sort_values('Kode #').drop_duplicates(subset=['Kode #']),
                         db[~db['Kode #'].astype(str).str.startswith('1')]], ignore_index=True)
@@ -302,9 +308,77 @@ if ('filtered_df_test' in st.session_state) :
     if wa_qty =='QUANTITY':
         df_prov = df_prov.groupby(['Provinsi'])[['QUANTITY']].sum().reset_index()
         df_test.loc[:,[x for x in df_test.columns if x in list_bulan]] = df_test.loc[:,[x for x in df_test.columns if x in list_bulan]].applymap(lambda x: f'{x:.0f}' if isinstance(x, float) else x)
-
-    df_prov['Provinsi'] = df_prov['Provinsi'].replace('BANTEN','PROBANTEN')
-    #create_sales_map_chart(prov.merge(df_prov,how='left',left_on='properties',right_on='Provinsi').drop(columns='Provinsi').fillna(0))
+    if st.session_state.button_clicked:
+        if st.button('Show Map'):
+            df_prov['Provinsi'] = df_prov['Provinsi'].str.upper().replace('BANTEN','PROBANTEN')
+            #df_prov
+            #create_sales_map_chart(prov.merge(df_prov,how='left',left_on='properties',right_on='Provinsi').drop(columns='Provinsi').fillna(0))
+            m = folium.Map(location=[-0.4471383, 117.1655734], zoom_start=5)
+            
+            # Gabungkan data GeoJSON dengan DataFrame df_prov berdasarkan provinsi
+            # Asumsikan 'Propinsi' adalah kolom di GeoJSON yang berisi nama provinsi yang sama dengan kolom di df_prov
+            
+            # Pastikan bahwa nama kolom 'Provinsi' di df_prov sama dengan 'Propinsi' di GeoJSON
+            #df_prov['Provinsi'] = df_prov['Provinsi'].str.title()  # Menyamakannya dengan format nama di GeoJSON
+            
+            # Gabungkan df_prov ke dalam GeoJSON berdasarkan 'Provinsi' dan 'Propinsi'
+            geojson_data_with_prices = []
+            for feature in geojson_data['features']:
+                provinsi = feature['properties']['Propinsi']
+                harga = df_prov.loc[df_prov['Provinsi'] == provinsi, wa_qty].values
+                if harga.size>0:
+                    feature['properties'][wa_qty] = float(harga[0])
+                else:
+                    feature['properties'][wa_qty] = None
+                geojson_data_with_prices.append(feature)
+            
+            geojson_data['features'] = geojson_data_with_prices
+            
+            # Menambahkan choropleth dengan data harga
+            folium.Choropleth(
+                geo_data=geojson_data,
+                name='choropleth',
+                data=df_prov,
+                columns=['Provinsi', wa_qty],
+                key_on='properties.Propinsi',  # Sesuaikan dengan nama properti di GeoJSON
+                fill_color='YlOrRd',  # Warna gradient
+                fill_opacity=0.7,
+                line_opacity=0.05,
+                legend_name=wa_qty,
+            ).add_to(m)
+            
+            # Menambahkan GeoJson dengan Tooltip
+            folium.GeoJson(
+                geojson_data,
+                name="Provinsi",
+                tooltip=GeoJsonTooltip(
+                    fields=["Propinsi", wa_qty],  # Sesuaikan dengan kolom yang ada pada GeoJSON
+                    aliases=["Provinsi:", f"{wa_qty}:"],  # Label yang akan ditampilkan di tooltip
+                    localize=True
+                ),
+                style_function=lambda x: {
+                    #'fillOpacity': 0.0 if x['properties'][wa_qty] is None else 0.7,  # Set opasitas area
+                    'weight': 0.2,  # Menghilangkan garis perbatasan
+                    'color': 'white'  # Menghilangkan warna garis perbatasan
+                }
+            ).add_to(m)
+            folium.TileLayer('cartodbpositron', control=False).add_to(m)
+            # Menambahkan kontrol layer
+            folium.LayerControl().add_to(m)
+            
+            # Menampilkan peta
+            st.markdown("""
+            <style>
+                .streamlit-expanderHeader {
+                    font-size: 18px;
+                }
+                iframe {
+                    width: 100%;  /* Mengatur lebar iframe agar mengikuti lebar layar */
+                    height: 400px;  /* Mengatur tinggi iframe */
+                }
+            </style>
+            """, unsafe_allow_html=True)
+            folium_static(m)
     df_test.iloc[:,2:-1] = df_test.iloc[:,2:-1].replace('',0).astype(float)
     df_test = df_test.style.format(lambda x: format_number(x)).background_gradient(cmap='Reds', axis=1, subset=df_test.columns[2:-1])
     st.dataframe(df_test, use_container_width=True, hide_index=True)
@@ -352,4 +426,3 @@ if ('filtered_df_test' in st.session_state) :
                 df_vendor[df_vendor['Month']==bulan[-1]][['Kategori Pemasok','Kode #',f'Diff Min-Max {bulan[-1]}']].dropna(subset=f'Diff Min-Max {bulan[-1]}'), how='left').sort_values(f'Diff Min-Max {bulan[-1]}', ascending=False)
     df_vendor[f'Diff Min-Max {bulan[-1]}'] = df_vendor[f'Diff Min-Max {bulan[-1]}'].fillna(0).apply(lambda x: f'{x*100:.2f}%')
     st.dataframe(df_vendor, use_container_width=True, hide_index=True)
-

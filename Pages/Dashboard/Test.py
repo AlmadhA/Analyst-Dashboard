@@ -5,1133 +5,423 @@ import io
 import pandas as pd
 import os
 import gdown
-import tempfile
-
+import tempfile 
+import folium
+import requests
+import pandas as pd
+from folium import GeoJsonTooltip
+from streamlit_folium import folium_static
+ 
+import plotly.graph_objects as go
 import plotly.express as px
-import plotly.graph_objs as go
+import numpy as np
 import streamlit as st
+import pandas as pd
+import plotly.graph_objs as go
+from urllib.request import urlopen
+import json
 
+if 'geojson_data' not in locals():
+    geojson_data = requests.get(
+    "https://github.com/superpikar/indonesia-geojson/blob/master/indonesia-province.json?raw=true"
+    ).json()
+# Fungsi untuk membuat map chart
+def create_sales_map_chart(df):
+        
+    fig = px.choropleth(
+        df, 
+        geojson=ccaa, 
+        locations='properties', 
+        featureidkey="properties.Propinsi", 
+        color=f'{wa_qty}',
+        hover_name='properties',
+        hover_data={f'{wa_qty}': True},
+        color_continuous_scale='YlOrRd',
+        title=f'{wa_qty}'
+    )
+    
+    # Mengupdate peta untuk fokus ke Indonesia
+    fig.update_geos(
+        fitbounds="locations", 
+        visible=False)
+    
+    # Menyesuaikan tampilan layout
+    fig.update_layout(
+        margin={"r":0,"t":50,"l":0,"b":0},  # Margin minimal untuk memenuhi layar
+        geo=dict(
+            projection_scale=7  # Memperbesar peta
+        ),
+    )
+
+    # Menampilkan map chart di Streamlit
+    st.plotly_chart(fig, use_container_width=True)
+
+
+# Fungsi untuk membuat barchart
+def plot_grouped_barchart(df):
+    fig = go.Figure()
+
+    # Mendapatkan nama barang
+    nama_barang = df['Nama Barang']
+    
+    # Warna berbeda untuk setiap bulan
+    colors = px.colors.qualitative.Plotly
+
+    # Menambahkan trace untuk setiap bulan
+    for i, b in enumerate(bulan[-3:]):
+        fig.add_trace(go.Bar(
+            x=df['Nama Barang'],
+            y=df[b],
+            name=b,
+            marker_color=colors[i % len(colors)],
+            text=df[b],
+            textposition='outside',
+            textangle=-90,
+        ))
+
+    # Menambahkan layout
+    fig.update_layout(
+        title='',
+        xaxis_title='NAMA BARANG',
+        yaxis_title=f'{wa_qty}',
+        barmode='group',  # Mengelompokkan bar per nama barang
+        xaxis=dict(tickangle=-45),
+        margin=dict(l=50, r=50, t=50, b=50)
+    )
+
+    # Menampilkan barchart
+    st.plotly_chart(fig, use_container_width=True)
+
+
+# Fungsi untuk membuat line chart
+def create_line_chart(df):
+    # Membuat trace untuk Sales
+    trace = go.Scatter(
+        x=df.index,
+        y=df.values,
+        mode='lines+markers',  # Garis dengan titik marker
+        name='Sales',
+        line=dict(color='dodgerblue', width=2),
+        marker=dict(size=8)
+    )
+
+    # Membuat layout untuk plot
+    layout = go.Layout(
+        title=dict(text='', x=0.5, font=dict(size=20, color='darkblue')),
+        #xaxis=dict(title='MONTH', titlefont=dict(size=16, color='darkblue')),
+        #yaxis=dict(title=f'{wa_qty}', titlefont=dict(size=16, color='darkblue')),
+        xaxis=dict(title='MONTH'),
+        yaxis=dict(title=f'{wa_qty}'),
+        plot_bgcolor='white',
+        xaxis_gridcolor='lightgray',
+        yaxis_gridcolor='lightgray',
+        hovermode='closest'
+    )
+
+    # Membuat figure dari trace dan layout
+    fig = go.Figure(data=[trace], layout=layout)
+
+    # Menampilkan plot di Streamlit
+    st.plotly_chart(fig, use_container_width=True)
+
+
+    
 st.set_page_config(layout="wide")
 
-st.markdown(
-    """
-    <div style="background-color: #68041c; padding: 10px; border-radius: 5px; text-align: center;">
-        <h2 style="color: white; margin: 0;">Dashboard-Leadtime</h2>
-    </div>
-    """,
-    unsafe_allow_html=True
-)
-st.write('')
+def add_min_width_css():
+    st.markdown(
+        """
+        <style>
+        /* Set a minimum width for the app */
+        .css-1d391kg {
+            min-width: 3000px; /* Set the minimum width */
+        }
+        </style>
+        """,
+        unsafe_allow_html=True
+    )
 
-def download_file_from_github(url, save_path):
-    response = requests.get(url)
-    if response.status_code == 200:
-        with open(save_path, 'wb') as file:
-            file.write(response.content)
-        print(f"File downloaded successfully and saved to {save_path}")
-    else:
-        print(f"Failed to download file. Status code: {response.status_code}")
+# Add CSS styling to the app
+add_min_width_css()
 
-
+def format_number(x):
+    if x==0:
+        return ''
+    if isinstance(x, (int, float)):
+        if x.is_integer():
+            return "{:,.0f}".format(x)
+        else:
+            return "{:,.2f}".format(x)
+    return x
+    
 if 'button_clicked' not in st.session_state:
     st.session_state.button_clicked = False
 
 # Fungsi untuk mereset state button
 def reset_button_state():
     st.session_state.button_clicked = False
-
-if 'df_internal' not in locals():
-  with zipfile.ZipFile(f'Dataset/Leadtime Internal & Eksternal/2025/Leadtime.zip', 'r') as z:
-    with z.open('Leadtime_internal.csv') as f:
-        df_internal = pd.read_csv(f)
-    with z.open('Leadtime_eksternal_1.csv') as f:
-        df_eksternal = pd.read_csv(f)
-    with z.open('Leadtime_eksternal_2.csv') as f:
-        df_eksternal2 = pd.read_csv(f)
-    with z.open('Leadtime_resto.csv') as f:
-        df_resto = pd.read_csv(f).fillna(0)
-
-
-def create_pie_chart(df, labels_column, values_column, title="Pie Chart", key=None):
-    color_mapping = {
-        'On-Time': px.colors.sequential.RdBu[1],  
-        'Backdate': px.colors.sequential.RdBu[0] 
-    }
-    fig = px.pie(
-        df, 
-        names=labels_column, 
-        values=values_column, 
-        title='',
-        hole=0.3,
-        color=labels_column,
-        color_discrete_map=color_mapping  # Skema warna yang lebih estetis
-    )
     
-    # Kustomisasi tampilan
-    fig.update_traces(
-        textinfo='percent+label',  # Menampilkan label dan persentase
-        textfont_size=12,  # Ukuran teks yang lebih besar
-        pull=[0.1 if value == df[values_column].max() else 0 for value in df[values_column]]  # Memperbesar bagian terbesar
-    )
+# Unduh file dari GitHub
+col = st.columns(2)
+with col[0]:
+    st.title('Dashboard - Analisa Harga Barang')
+with col[1]:
+    tahun = st.selectbox("TAHUN:", ['2024','2025'], index=1, on_change=reset_button_state)
 
-    fig.update_layout(
-        showlegend=True,  # Menampilkan legenda
-        legend=dict(
-            orientation="h",  # Menampilkan legenda secara horizontal
-            yanchor="bottom",
-            y=-0.2,
-            xanchor="center",
-            x=0.5
-        )
-    )
-    fig.update_layout(width=350, height=350)
-    # Menampilkan grafik di Streamlit
-    st.plotly_chart(fig, key=key)
 
-def create_line_chart(df, x_column, y_column, title="Line Chart", key=None):
-    """
-    Membuat grafik garis (line chart) dengan Plotly dan menampilkannya di Streamlit.
-    
-    Parameters:
-    - df: DataFrame yang berisi data untuk grafik
-    - x_column: Nama kolom yang ingin digunakan sebagai sumbu X
-    - y_column: Nama kolom yang ingin digunakan sebagai sumbu Y
-    - title: Judul grafik (default: "Line Chart")
-    """
-    # Membuat line chart menggunakan Plotly
-    fig = px.line(df, x=x_column, y=y_column)
-    color = px.colors.sequential.RdBu[0]
-    # Kustomisasi tampilan
-    fig.update_traces(
-        line=dict(color=color, width=2.5),  # Warna garis biru dengan ketebalan 2.5
-        mode='lines+markers'  # Menampilkan garis dan titik data
-    )
-    
-    fig.update_layout(
-        xaxis_title=x_column,
-        yaxis_title=y_column
-    )
-    fig.update_layout(width=500, height=350)
-    # Menampilkan grafik di Streamlit
-    st.plotly_chart(fig, key=key)
+if 'df_9901' not in locals():
+    df_9901 = pd.read_csv(f'Dataset/Analisa Harga Barang/{tahun}/9901.csv')
 
-def create_percentage_barchart(df, x_col, y_col, key=None):
-    # Menghitung persentase berdasarkan y_col
-    df['Percentage'] = (df[y_col] / df[y_col].sum()) * 100
+col = st.columns(3)
+with col[0]:
+    pic = st.selectbox("PIC:", ['All','RESTO','CP','WIP','LAINNYA'], index=1, on_change=reset_button_state)
+with col[1]:
+    cab = st.selectbox("NAMA CABANG:", ['All'] + sorted(df_9901['Nama Cabang'].unique().tolist()), index=0, on_change=reset_button_state)
+with col[2]:
+    kategori_barang = st.selectbox("KATEGORI BARANG:", ['All'] + sorted(df_9901['Kategori Barang'].unique().tolist()), index=sorted(df_9901['Kategori Barang'].unique().tolist()).index('10.FOOD [RM] - COM')+1, on_change=reset_button_state)
 
-    # Membuat bar chart menggunakan Plotly
-    fig = px.bar(
-        df,
-        x=x_col,
-        y='Percentage',
-        labels={x_col: 'Kategori', 'Percentage': '%'},
-        color_discrete_sequence=px.colors.sequential.RdBu,
-        hover_data={y_col: True, 'Percentage': ':.2f%'}  # Menampilkan angka kuantitas dan persentase pada hover
-    )
-    
-    # Menambahkan nilai persentase pada setiap bar
-    fig.update_traces(
-        texttemplate='%{y:.2f}%', 
-        textposition='inside', 
-        insidetextanchor='middle'
-    )
-    
-    # Mengatur layout grafik
-    fig.update_layout(
-        width=350, 
-        height=350
-    )
-    
-    # Menampilkan grafik di Streamlit
-    st.plotly_chart(fig, key=key)
+col = st.columns(3)
+with col[0]:
+    wa_qty = st.selectbox("WEIGHT AVG/QTY:", ['WEIGHT AVG (PRICE)','QUANTITY'], index= 0, on_change=reset_button_state)
+with col[1]:
+    list_bulan = df_9901['Month'].unique().tolist()
+    bulan = st.multiselect("BULAN:", list_bulan, default = list_bulan[-3:], on_change=reset_button_state)
+    bulan = sorted(bulan, key=lambda x: list_bulan.index(x))
 
+category = st.selectbox("TOP/BOTTOM:", ['TOP','BOTTOM'], index= 0, on_change=reset_button_state)
+
+if st.button('Show'):
+    st.session_state.button_clicked = True
+    
+#if 'filtered_df_test' not in st.session_state:   
+if st.session_state.button_clicked:
+        df_prov = pd.read_csv('Dataset/Master/data_provinsi.csv')
         
-df_internal['Rute Global'] = pd.Categorical(df_internal['Rute Global'],['WH/DC to WH/DC','WH/DC to Resto','Resto to WH/DC','Resto to Resto'])
-df_eksternal['Tanggal PO'] = pd.to_datetime(df_eksternal['Tanggal PO'])
-df_eksternal2['Tanggal PO'] = pd.to_datetime(df_eksternal2['Tanggal PO'])
-df_internal['Tanggal IT Kirim'] = pd.to_datetime(df_internal['Tanggal IT Kirim'])
-df_internal['Tanggal IT Terima'] = pd.to_datetime(df_internal['Tanggal IT Terima'])
-df_internal['Tanggal Kirim'] = pd.to_datetime(df_internal['Bulan Kirim'],format='%b-%y')
-df_internal['Tanggal Terima'] = pd.to_datetime(df_internal['Bulan Terima'],format='%b-%y')
-df_eksternal['Date PO'] = pd.to_datetime(df_eksternal['Bulan PO'],format='%b-%y')
-df_eksternal2['Date PO'] = pd.to_datetime(df_eksternal2['Bulan PO'],format='%b-%y')
-
-label_kategori = ['(-)','(<=0)','(1)','(2-3)','(4-7)','(>7)']
-df_eksternal['PR(Create)-PO(Datang) Group'] = pd.Categorical(df_eksternal['PR(Create)-PO(Datang) Group'],categories=label_kategori)
-df_eksternal['PO(Create)-PO(Datang) Group'] = pd.Categorical(df_eksternal['PO(Create)-PO(Datang) Group'],categories=label_kategori)
-df_eksternal['RI(Date)-PO(Datang) Group'] = pd.Categorical(df_eksternal['RI(Date)-PO(Datang) Group'],categories=label_kategori)
-df_eksternal2['RI(Date)-RI(Create) Group'] = pd.Categorical(df_eksternal2['RI(Date)-RI(Create) Group'],categories=label_kategori)
-
-
-# Arahkan ke aplikasi berdasarkan pilihan pengguna
-internal_tab, eksternal_tab, = st.tabs(["Leadtime-Internal", "Leadtime-Eksternal"])
-with internal_tab:
-    def style_table():
-        html = f"""
-        <style>
-            table {{
-                font-size: 12px;  /* Ganti ukuran sesuai kebutuhan */
-                width: 100%;
-            }}
-        </style>
-        """
-        return html
-    st.markdown(style_table(), unsafe_allow_html=True)
+        db = pd.read_csv('Dataset/Master/database barang.csv')
+        db = db.drop_duplicates()
+        db = pd.concat([db[db['Kode #'].astype(str).str.startswith('1')].sort_values('Kode #').drop_duplicates(subset=['Kode #']),
+                        db[~db['Kode #'].astype(str).str.startswith('1')]], ignore_index=True)
         
-    def highlight_first_word(df, col_name):
-        def apply_highlight(value):
-            # Pisahkan kata-kata dalam cell
-            words = value.split()
-            # Warna hanya kata pertama
-            if words:
-                words[0] = f"<span style='color: red;'>{words[0]}</span>"
-            return " ".join(words)
-    
-        # Terapkan fungsi highlight pada kolom yang dimaksud
-        styled_df = df.copy()
-        styled_df[col_name] = styled_df[col_name].apply(apply_highlight)
-        return styled_df
-    
-    def highlight_last_word(df, col_name):
-        def apply_highlight(value):
-            # Pisahkan kata-kata dalam cell
-            words = value.split()
-            # Warna hanya kata pertama
-            if words:
-                words[-1] = f"<span style='color: red;'>{words[-1]}</span>"
-            return " ".join(words)
-    
-        # Terapkan fungsi highlight pada kolom yang dimaksud
-        styled_df = df.copy()
-        styled_df[col_name] = styled_df[col_name].apply(apply_highlight)
-        return styled_df
-        
-    st.markdown(
-        """
-        <div style="background-color: #68041c; padding: 10px; border-radius: 5px; text-align: center;">
-            <h3 style="color: white; margin: 0;">Leadtime-Internal</h3>
-        </div>
-        """,
-        unsafe_allow_html=True
-    )
-        
-    st.write(' ')
-    
-    st.markdown('## Summary')
-    df_resto = df_resto.set_index('Month')
-    #st.dataframe(df_resto.style.format(lambda x: '' if x == 0 else '{:,.0f}'.format(x)))#.apply(lambda x: ['background: red' if i == 0 else '' for i in range(len(x))], axis=1).background_gradient(cmap='Reds', axis=1, subset=df_resto.iloc[0:1, :]))    
-    st.dataframe(df_resto.style.format(lambda x: '' if x == 0 else '{:,.0f}'.format(x)).background_gradient(cmap='Reds', axis=0, subset=['CTP']))
-
-    st.markdown('### Outgoing Backdate')
-    col = st.columns([1,2,1,2])
-    with col[0]:
-        df_pie = df_internal.groupby(['Kategori Leadtime SJ'])[['Nomor IT Kirim']].nunique().reset_index()
-        
-        create_pie_chart(df_pie, labels_column='Kategori Leadtime SJ', values_column='Nomor IT Kirim', title="OUTGOING BACKDATE")
-    with col[1]:
-        df_line = df_internal.groupby(['Tanggal Kirim','Kategori Leadtime SJ'])[['Nomor IT Kirim']].nunique().reset_index().groupby('Tanggal Kirim')[['Nomor IT Kirim']].sum().reset_index().rename(columns={'Nomor IT Kirim':'Total'}).merge(
-            df_internal[df_internal['Kategori Leadtime SJ']=='Backdate'].groupby(['Tanggal Kirim'])[['Nomor IT Kirim']].nunique().reset_index(), how='left'
-        )
-        df_line['Nomor IT Kirim'] = (df_line['Nomor IT Kirim']/df_line['Total'])*100
-        create_line_chart(df_line, x_column='Tanggal Kirim', y_column='Nomor IT Kirim', title="DAILY BACKDATE")
-    with col[2]:
-        df_bar = df_internal[
-                 (df_internal['Kategori Leadtime SJ']=='Backdate')].groupby(['Kirim #2'])[['Nomor IT Kirim']].nunique().reset_index()
-        create_percentage_barchart(df_bar, 'Kirim #2', 'Nomor IT Kirim')
-    with col[3]:
-        st.write('')
-        col2 = st.columns(3)
-        with col2[0]:
-            st.metric(label="Total", value="{:,.0f}".format(df_internal['Nomor IT Kirim'].nunique()), delta=None)
-        with col2[1]:
-            st.metric(label="On-Time", value="{:,.0f}".format(df_pie[df_pie['Kategori Leadtime SJ']=='On-Time']['Nomor IT Kirim'].values[0]), delta=None)
-        with col2[2]:
-            st.metric(label="Backdate", value="{:,.0f}".format(df_pie[df_pie['Kategori Leadtime SJ']=='Backdate']['Nomor IT Kirim'].values[0]), delta=None)
-        
-        df_tabel = df_internal[
-                 (df_internal['Kategori Leadtime SJ']=='Backdate')].groupby(['Leadtime SJ Group','Rute Global'])[['Nomor IT Kirim']].nunique().reset_index().pivot(index='Rute Global',columns='Leadtime SJ Group',values='Nomor IT Kirim').reset_index().merge(
-            df_internal[
-                 (df_internal['Kategori Leadtime SJ']=='Backdate')].groupby(['Rute Global'])[['Nomor IT Kirim']].nunique().reset_index().rename(columns={'Nomor IT Kirim':'Total'})
-                 )
-        
-        df_tabel = pd.concat([df_tabel,pd.concat([df_internal[(df_internal['Kategori Leadtime SJ']=='Backdate')].groupby(['Leadtime SJ Group'])[['Nomor IT Kirim']].nunique().rename(columns={'Nomor IT Kirim':'Total'}),
-                               pd.DataFrame([df_internal[(df_internal['Kategori Leadtime SJ']=='Backdate')][['Nomor IT Kirim']].nunique().values],['Total'],columns=['Total'])]).T.reset_index().rename(columns={'index':'Rute Global'})])
-        styled_df = highlight_first_word(df_tabel, "Rute Global")
-        st.markdown(styled_df.to_html(escape=False, index=False), unsafe_allow_html=True)
-
-
-    
-    st.markdown('### Incoming Backdate')
-    col = st.columns([1,2,1,2])
-    with col[0]:
-        df_pie = df_internal.groupby(['Kategori Leadtime RI'])[['Nomor IT Terima']].nunique().reset_index()
-        
-        create_pie_chart(df_pie, labels_column='Kategori Leadtime RI', values_column='Nomor IT Terima', title="INCOMING BACKDATE")
-    with col[1]:
-        df_line = df_internal.groupby(['Tanggal Terima','Kategori Leadtime RI'])[['Nomor IT Terima']].nunique().reset_index().groupby('Tanggal Terima')[['Nomor IT Terima']].sum().reset_index().rename(columns={'Nomor IT Terima':'Total'}).merge(
-            df_internal[df_internal['Kategori Leadtime RI']=='Backdate'].groupby(['Tanggal Terima'])[['Nomor IT Terima']].nunique().reset_index(), how='left'
-        )
-        df_line['Nomor IT Terima'] = (df_line['Nomor IT Terima']/df_line['Total'])*100
-        create_line_chart(df_line, x_column='Tanggal Terima', y_column='Nomor IT Terima', title="DAILY BACKDATE")
-    with col[2]:
-        df_bar = df_internal[
-                 (df_internal['Kategori Leadtime RI']=='Backdate')].groupby(['Terima #2'])[['Nomor IT Terima']].nunique().reset_index()
-        create_percentage_barchart(df_bar, 'Terima #2', 'Nomor IT Terima')
-    with col[3]:
-        st.write('')
-        col2 = st.columns(3)
-        with col2[0]:
-            st.metric(label="Total", value="{:,.0f}".format(df_internal['Nomor IT Terima'].nunique()), delta=None)
-        with col2[1]:
-            st.metric(label="On-Time", value="{:,.0f}".format(df_pie[df_pie['Kategori Leadtime RI']=='On-Time']['Nomor IT Terima'].values[0]), delta=None)
-        with col2[2]:
-            st.metric(label="Backdate", value="{:,.0f}".format(df_pie[df_pie['Kategori Leadtime RI']=='Backdate']['Nomor IT Terima'].values[0]), delta=None)
-    
-        df_tabel = df_internal[
-                  (df_internal['Kategori Leadtime RI']=='Backdate')].groupby(['Leadtime RI Group','Rute Global'])[['Nomor IT Terima']].nunique().reset_index().pivot(index='Rute Global',columns='Leadtime RI Group',values='Nomor IT Terima').reset_index().merge(
-            df_internal[
-                  (df_internal['Kategori Leadtime RI']=='Backdate')].groupby(['Rute Global'])[['Nomor IT Terima']].nunique().reset_index().rename(columns={'Nomor IT Terima':'Total'})
-                 )
-        df_tabel = pd.concat([df_tabel,pd.concat([df_internal[(df_internal['Kategori Leadtime RI']=='Backdate')].groupby(['Leadtime RI Group'])[['Nomor IT Terima']].nunique().rename(columns={'Nomor IT Terima':'Total'}),
-                               pd.DataFrame([df_internal[(df_internal['Kategori Leadtime RI']=='Backdate')][['Nomor IT Terima']].nunique().values],['Total'],columns=['Total'])]).T.reset_index().rename(columns={'index':'Rute Global'})])
-        styled_df = highlight_last_word(df_tabel, "Rute Global")
-        st.markdown(styled_df.to_html(escape=False, index=False), unsafe_allow_html=True)
-    
-    data = {
-        "Tanggal": pd.date_range(start="2024-01-01", end="2025-12-31", freq="D"),
-        "Penjualan": range(1, 732)
-    }
-    df = pd.DataFrame(data)
-    
-    
-    # Widget untuk memilih rentang tanggal
-    start_date, end_date = st.date_input(
-        "RANGE DATE: ",
-        [df["Tanggal"].min(), df["Tanggal"].max()],  # Default nilai awal
-        min_value=df["Tanggal"].min(),
-        max_value=df["Tanggal"].max()
-    )
-    
-    pic = st.selectbox("PIC RESPONSIBLE:", ['All','WH/DC','Resto'], index=0, on_change=reset_button_state)
-    
-    st.markdown('### Outgoing Backdate')
-    col = st.columns([1,2,1,2])
-    with col[0]:
-        df_pie = df_internal[(df_internal["Tanggal IT Kirim"] >= pd.Timestamp(start_date)) & (df_internal["Tanggal IT Kirim"] <= pd.Timestamp(end_date)) & (df_internal['Kirim #2'].isin(['Resto','WH/DC'] if pic=='All' else [pic]))].groupby(['Kategori Leadtime SJ'])[['Nomor IT Kirim']].nunique().reset_index()
-        
-        create_pie_chart(df_pie, labels_column='Kategori Leadtime SJ', values_column='Nomor IT Kirim', title="OUTGOING BACKDATE2", key='pie')
-    with col[1]:
-        df_line = df_internal[(df_internal["Tanggal IT Kirim"] >= pd.Timestamp(start_date)) & (df_internal["Tanggal IT Kirim"] <= pd.Timestamp(end_date)) & (df_internal['Kirim #2'].isin(['Resto','WH/DC'] if pic=='All' else [pic]))
-                     & (df_internal['Kategori Leadtime SJ']=='Backdate')].groupby(['Tanggal IT Kirim'])[['Nomor IT Kirim']].nunique().reset_index()
-        
-        create_line_chart(df_line, x_column='Tanggal IT Kirim', y_column='Nomor IT Kirim', title="DAILY BACKDATE", key='line')
-    with col[2]:
-        df_bar = df_internal[(df_internal["Tanggal IT Kirim"] >= pd.Timestamp(start_date)) & (df_internal["Tanggal IT Kirim"] <= pd.Timestamp(end_date)) & (df_internal['Kirim #2'].isin(['Resto','WH/DC'] if pic=='All' else [pic]))
-                 & (df_internal['Kategori Leadtime SJ']=='Backdate')].groupby(['Kirim #2'])[['Nomor IT Kirim']].nunique().reset_index()
-        create_percentage_barchart(df_bar, 'Kirim #2', 'Nomor IT Kirim', key='bar')
-    with col[3]:
-        st.write('')
-        col2 = st.columns(3)
-        with col2[0]:
-            st.metric(label="Total", value="{:,.0f}".format(df_internal[(df_internal["Tanggal IT Terima"] >= pd.Timestamp(start_date)) & (df_internal["Tanggal IT Terima"] <= pd.Timestamp(end_date)) & (df_internal['Kirim #2'].isin(['Resto','WH/DC'] if pic=='All' else [pic]))]['Nomor IT Kirim'].nunique()), delta=None)
-        with col2[1]:
-            st.metric(label="On-Time", value="{:,.0f}".format(df_pie[df_pie['Kategori Leadtime SJ']=='On-Time']['Nomor IT Kirim'].values[0]), delta=None)
-        with col2[2]:
-            st.metric(label="Backdate", value="{:,.0f}".format(df_pie[df_pie['Kategori Leadtime SJ']=='Backdate']['Nomor IT Kirim'].values[0]), delta=None)
-        
-        df_tabl = df_internal[(df_internal["Tanggal IT Kirim"] >= pd.Timestamp(start_date)) & (df_internal["Tanggal IT Kirim"] <= pd.Timestamp(end_date)) & (df_internal['Kirim #2'].isin(['Resto','WH/DC'] if pic=='All' else [pic]))
-                 & (df_internal['Kategori Leadtime SJ']=='Backdate')]
-        df_tabel = df_tabl.groupby(['Leadtime SJ Group','Rute Global'])[['Nomor IT Kirim']].nunique().reset_index().pivot(index='Rute Global',columns='Leadtime SJ Group',values='Nomor IT Kirim').reset_index().merge(
-            df_tabl.groupby(['Rute Global'])[['Nomor IT Kirim']].nunique().reset_index().rename(columns={'Nomor IT Kirim':'Total'})
-                 )
-
-        if pic =='Resto':
-            df_tabel = df_tabel.loc[df_tabel['Rute Global'].isin(['Resto to WH/DC','Resto to Resto'])]
-            styled_df = highlight_first_word(df_tabel, "Rute Global")
-            st.markdown(styled_df.to_html(escape=False, index=False), unsafe_allow_html=True)
-        elif pic=='WH/DC':
-            df_tabel = df_tabel.loc[df_tabel['Rute Global'].isin(['WH/DC to WH/DC','WH/DC to Resto'])]
-            styled_df = highlight_first_word(df_tabel, "Rute Global")
-            st.markdown(styled_df.to_html(escape=False, index=False), unsafe_allow_html=True)
+        if kategori_barang != 'All':
+            df_test = df_9901[(df_9901['Kategori Barang']==kategori_barang)]
         else:
-            df_tabel = pd.concat([df_tabel,pd.concat([df_tabl.groupby(['Leadtime SJ Group'])[['Nomor IT Kirim']].nunique().rename(columns={'Nomor IT Kirim':'Total'}),
-                            pd.DataFrame([df_tabl[['Nomor IT Kirim']].nunique().values],['Total'],columns=['Total'])]).T.reset_index().rename(columns={'index':'Rute Global'})])
-            styled_df = highlight_first_word(df_tabel, "Rute Global")
-            st.markdown(styled_df.to_html(escape=False, index=False), unsafe_allow_html=True)
-    
-    
-    st.markdown('### Incoming Backdate')
-    col = st.columns([1,2,1,2])
-    with col[0]:
-        df_pie = df_internal[(df_internal["Tanggal IT Terima"] >= pd.Timestamp(start_date)) & (df_internal["Tanggal IT Terima"] <= pd.Timestamp(end_date)) & (df_internal['Terima #2'].isin(['Resto','WH/DC'] if pic=='All' else [pic]))].groupby(['Kategori Leadtime RI'])[['Nomor IT Terima']].nunique().reset_index()
-        
-        create_pie_chart(df_pie, labels_column='Kategori Leadtime RI', values_column='Nomor IT Terima', title="INCOMING BACKDATE2",key='pie2')
-    with col[1]:
-        df_line = df_internal[(df_internal["Tanggal IT Terima"] >= pd.Timestamp(start_date)) & (df_internal["Tanggal IT Terima"] <= pd.Timestamp(end_date)) & (df_internal['Terima #2'].isin(['Resto','WH/DC'] if pic=='All' else [pic]))
-                     & (df_internal['Kategori Leadtime RI']=='Backdate')].groupby(['Tanggal IT Terima'])[['Nomor IT Terima']].nunique().reset_index()
-        
-        create_line_chart(df_line, x_column='Tanggal IT Terima', y_column='Nomor IT Terima', title="DAILY BACKDATE", key='line2')
-    with col[2]:
-        df_bar = df_internal[(df_internal["Tanggal IT Terima"] >= pd.Timestamp(start_date)) & (df_internal["Tanggal IT Terima"] <= pd.Timestamp(end_date)) & (df_internal['Terima #2'].isin(['Resto','WH/DC'] if pic=='All' else [pic]))
-                 & (df_internal['Kategori Leadtime RI']=='Backdate')].groupby(['Terima #2'])[['Nomor IT Terima']].nunique().reset_index()
-        create_percentage_barchart(df_bar, 'Terima #2', 'Nomor IT Terima', key='bar2')
-    with col[3]:
-        st.write('')
-        col2 = st.columns(3)
-        with col2[0]:
-            st.metric(label="Total", value="{:,.0f}".format(df_internal[(df_internal["Tanggal IT Terima"] >= pd.Timestamp(start_date)) & (df_internal["Tanggal IT Terima"] <= pd.Timestamp(end_date)) & (df_internal['Terima #2'].isin(['Resto','WH/DC'] if pic=='All' else [pic]))]['Nomor IT Terima'].nunique()), delta=None)
-        with col2[1]:
-            st.metric(label="On-Time", value="{:,.0f}".format(df_pie[df_pie['Kategori Leadtime RI']=='On-Time']['Nomor IT Terima'].values[0]), delta=None)
-        with col2[2]:
-            st.metric(label="Backdate", value="{:,.0f}".format(df_pie[df_pie['Kategori Leadtime RI']=='Backdate']['Nomor IT Terima'].values[0]), delta=None)
-    
-        df_tabl = df_internal[(df_internal["Tanggal IT Terima"] >= pd.Timestamp(start_date)) & (df_internal["Tanggal IT Terima"] <= pd.Timestamp(end_date)) & (df_internal['Terima #2'].isin(['Resto','WH/DC'] if pic=='All' else [pic]))
-                 & (df_internal['Kategori Leadtime RI']=='Backdate')]
-        df_tabel = df_tabl.groupby(['Leadtime RI Group','Rute Global'])[['Nomor IT Terima']].nunique().reset_index().pivot(index='Rute Global',columns='Leadtime RI Group',values='Nomor IT Terima').reset_index().merge(
-                df_tabl.groupby(['Rute Global'])[['Nomor IT Terima']].nunique().reset_index().rename(columns={'Nomor IT Terima':'Total'})
-                 )
-        
-        if pic=='Resto':
-            df_tabel = df_tabel.loc[df_tabel['Rute Global'].isin(['WH/DC to Resto','Resto to Resto'])]
-            styled_df = highlight_last_word(df_tabel, "Rute Global")
-            st.markdown(styled_df.to_html(escape=False, index=False), unsafe_allow_html=True)
-        elif pic=='WH/DC':
-            df_tabel = df_tabel.loc[df_tabel['Rute Global'].isin(['Resto to WH/DC','WH/DC to WH/DC'])]
-            styled_df = highlight_last_word(df_tabel, "Rute Global")
-            st.markdown(styled_df.to_html(escape=False, index=False), unsafe_allow_html=True)
+            df_test = df_9901
+            
+
+        df_test = df_test[(df_test['PIC'].isin(df_test['PIC'].unique() if pic=='All' else [pic]))].groupby(['Month', 'Nama Cabang','Kode #']).agg({'#Prime.Qty': 'sum','#Purch.Total': 'sum'}).reset_index()      
+        df_test['WEIGHT AVG (PRICE)'] = df_test['#Purch.Total'].astype(float)/df_test['#Prime.Qty'].astype(float)
+        df_test = df_test.rename(columns={'#Prime.Qty':'QUANTITY'}).drop(columns='#Purch.Total')
+        df_test = df_test.merge(db.drop_duplicates(), how='left', on='Kode #')
+        df_test['Filter Barang'] = df_test['Kode #'].astype(str) + ' - ' + df_test['Nama Barang']
+        df_prov = df_test[df_test['Month']==bulan[-1]].merge(df_prov,how='left',on='Nama Cabang')
+
+        if kategori_barang != 'All':
+            df_test = df_9901[(df_9901['Kategori Barang']==kategori_barang)]
         else:
-            df_tabel = pd.concat([df_tabel,pd.concat([df_tabl.groupby(['Leadtime RI Group'])[['Nomor IT Terima']].nunique().rename(columns={'Nomor IT Terima':'Total'}),
-                            pd.DataFrame([df_tabl[['Nomor IT Terima']].nunique().values],['Total'],columns=['Total'])]).T.reset_index().rename(columns={'index':'Rute Global'})])
-            styled_df = highlight_last_word(df_tabel, "Rute Global")
-            st.markdown(styled_df.to_html(escape=False, index=False), unsafe_allow_html=True)
+            df_test = df_9901
             
-with eksternal_tab:
-    st.markdown(
-        """
-        <div style="background-color: #68041c; padding: 10px; border-radius: 5px; text-align: center;">
-            <h3 style="color: white; margin: 0;">Leadtime-Eksternal</h3>
-        </div>
-        """,
-        unsafe_allow_html=True
-    )
-    st.write('')
-    st.markdown('## Summary')
-    kat_eksternal = st.selectbox("KATEGORI BACKDATE:", ['PR(Create)-PO(Datang)','PO(Create)-PO(Datang)','RI(Date)-PO(Datang)','RI(Date)-RI(Create)'], index=0, on_change=reset_button_state)
-    
-    if kat_eksternal =='PR(Create)-PO(Datang)':
-        st.markdown('### PR(Create)-PO(Datang)')
-        st.write('PIC Responsible: Logistic')
-        st.write('Kategori Item: Eksternal Logistic')
-        col = st.columns([1,2,1,2])
-        
-        with col[0]:
-            df_pie = df_eksternal[ (df_eksternal['PIC Responsible']=='Logistic') 
-                     & (df_eksternal['Kategori Item']=='Eksternal Logistic')].groupby(['Kategori PR(Create)-PO(Datang)'])[['Nomor PR+PO']].nunique().reset_index()
-            create_pie_chart(df_pie, labels_column='Kategori PR(Create)-PO(Datang)', values_column='Nomor PR+PO', title="OUTGOING BACKDATE", key='pie_')
-        with col[1]:
-            df_line = df_eksternal[(df_eksternal['PIC Responsible']=='Logistic') 
-                     & (df_eksternal['Kategori Item']=='Eksternal Logistic')
-                     ].groupby(['Date PO'])[['Nomor PR+PO']].nunique().reset_index().rename(columns={'Nomor PR+PO':'Total'}).merge(df_eksternal[(df_eksternal['PIC Responsible']=='Logistic') 
-                     & (df_eksternal['Kategori PR(Create)-PO(Datang)']=='Backdate') & (df_eksternal['Kategori Item']=='Eksternal Logistic')
-                     ].groupby(['Date PO'])[['Nomor PR+PO']].nunique().reset_index(), how='left')
-            df_line['Nomor PR+PO'] = (df_line['Nomor PR+PO']/df_line['Total'])*100
-            create_line_chart(df_line, x_column='Date PO', y_column='Nomor PR+PO', title="DAILY BACKDATE",key='line_')
-        with col[2]:
-            df_bar = df_eksternal[ (df_eksternal['PIC Responsible']=='Logistic') 
-                     & (df_eksternal['Kategori PR(Create)-PO(Datang)']=='Backdate') & (df_eksternal['Kategori Item']=='Eksternal Logistic')].groupby(['Rute'])[['Nomor PR+PO']].nunique().reset_index()
-            create_percentage_barchart(df_bar, 'Rute', 'Nomor PR+PO', key='bar_')
-        with col[3]:
-            st.write('')
-            col2 = st.columns(3)
-            with col2[0]:
-                st.metric(label="Total", value="{:,.0f}".format(df_eksternal[ (df_eksternal['PIC Responsible']=='Logistic') 
-                     & (df_eksternal['Kategori Item']=='Eksternal Logistic')]['Nomor PR+PO'].nunique()), delta=None)
-            with col2[1]:
-                st.metric(label="On-Time", value="{:,.0f}".format(df_pie[df_pie['Kategori PR(Create)-PO(Datang)']=='On-Time']['Nomor PR+PO'].values[0]), delta=None)
-            with col2[2]:
-                st.metric(label="Backdate", value="{:,.0f}".format(df_pie[df_pie['Kategori PR(Create)-PO(Datang)']=='Backdate']['Nomor PR+PO'].values[0]), delta=None)
-            
-            st.dataframe(df_eksternal[ (df_eksternal['PIC Responsible']=='Logistic') 
-                     & (df_eksternal['Kategori PR(Create)-PO(Datang)']=='Backdate') & (df_eksternal['Kategori Item']=='Eksternal Logistic')].groupby(['Rute','PR(Create)-PO(Datang) Group'])[['Nomor PR+PO']].nunique().reset_index().pivot(index='Rute',columns='PR(Create)-PO(Datang) Group',values='Nomor PR+PO').reset_index().merge(
-                df_eksternal[ (df_eksternal['PIC Responsible']=='Logistic') 
-                     & (df_eksternal['Kategori PR(Create)-PO(Datang)']=='Backdate') & (df_eksternal['Kategori Item']=='Eksternal Logistic')].groupby(['Rute'])[['Nomor PR+PO']].nunique().reset_index().rename(columns={'Nomor PR+PO':'Total'})
-                     ),
-                         hide_index=True)
-        
-        st.write('Kategori Item: Internal Logistic')
-        col = st.columns([1,2,1,2])
-        
-        with col[0]:
-            df_pie = df_eksternal[ (df_eksternal['PIC Responsible']=='Logistic') 
-                     & (df_eksternal['Kategori Item']=='Internal Logistic')].groupby(['Kategori PR(Create)-PO(Datang)'])[['Nomor PR+PO']].nunique().reset_index()
-            create_pie_chart(df_pie, labels_column='Kategori PR(Create)-PO(Datang)', values_column='Nomor PR+PO', title="OUTGOING BACKDATE",key='pie_1')
-        with col[1]:
-            df_line = df_eksternal[(df_eksternal['PIC Responsible']=='Logistic') 
-                     & (df_eksternal['Kategori Item']=='Internal Logistic')
-                     ].groupby(['Date PO'])[['Nomor PR+PO']].nunique().reset_index().rename(columns={'Nomor PR+PO':'Total'}).merge(df_eksternal[(df_eksternal['PIC Responsible']=='Logistic') 
-                     & (df_eksternal['Kategori PR(Create)-PO(Datang)']=='Backdate') & (df_eksternal['Kategori Item']=='Internal Logistic')
-                     ].groupby(['Date PO'])[['Nomor PR+PO']].nunique().reset_index(), how='left')
-            df_line['Nomor PR+PO'] = (df_line['Nomor PR+PO']/df_line['Total'])*100
-            create_line_chart(df_line, x_column='Date PO', y_column='Nomor PR+PO', title="DAILY BACKDATE",key='line_1')
-        with col[2]:
-            df_bar = df_eksternal[ (df_eksternal['PIC Responsible']=='Logistic') 
-                     & (df_eksternal['Kategori PR(Create)-PO(Datang)']=='Backdate') & (df_eksternal['Kategori Item']=='Internal Logistic')].groupby(['Rute'])[['Nomor PR+PO']].nunique().reset_index()
-            create_percentage_barchart(df_bar, 'Rute', 'Nomor PR+PO',key='bar_1')
-        with col[3]:
-            st.write('')
-            col2 = st.columns(3)
-            with col2[0]:
-                st.metric(label="Total", value="{:,.0f}".format(df_eksternal[ (df_eksternal['PIC Responsible']=='Logistic') 
-                     & (df_eksternal['Kategori Item']=='Internal Logistic')]['Nomor PR+PO'].nunique()), delta=None)
-            with col2[1]:
-                st.metric(label="On-Time", value="{:,.0f}".format(df_pie[df_pie['Kategori PR(Create)-PO(Datang)']=='On-Time']['Nomor PR+PO'].values[0]), delta=None)
-            with col2[2]:
-                st.metric(label="Backdate", value="{:,.0f}".format(df_pie[df_pie['Kategori PR(Create)-PO(Datang)']=='Backdate']['Nomor PR+PO'].values[0]), delta=None)
-            
-            st.dataframe(df_eksternal[ (df_eksternal['PIC Responsible']=='Logistic') 
-                     & (df_eksternal['Kategori PR(Create)-PO(Datang)']=='Backdate') & (df_eksternal['Kategori Item']=='Internal Logistic')].groupby(['Rute','PR(Create)-PO(Datang) Group'])[['Nomor PR+PO']].nunique().reset_index().pivot(index='Rute',columns='PR(Create)-PO(Datang) Group',values='Nomor PR+PO').reset_index().merge(
-                df_eksternal[ (df_eksternal['PIC Responsible']=='Logistic') 
-                     & (df_eksternal['Kategori PR(Create)-PO(Datang)']=='Backdate') & (df_eksternal['Kategori Item']=='Internal Logistic')].groupby(['Rute'])[['Nomor PR+PO']].nunique().reset_index().rename(columns={'Nomor PR+PO':'Total'})
-                     ),
-                         hide_index=True)
-            
-        st.write('Kategori Item: Resto')
-        col = st.columns([1,2,1,2])
-        
-        with col[0]:
-            df_pie = df_eksternal[ (df_eksternal['PIC Responsible']=='Resto') 
-                     ].groupby(['Kategori PR(Create)-PO(Datang)'])[['Nomor PR+PO']].nunique().reset_index()
-            create_pie_chart(df_pie, labels_column='Kategori PR(Create)-PO(Datang)', values_column='Nomor PR+PO', title="OUTGOING BACKDATE", key='pie_2')
-        with col[1]:
-            df_line = df_eksternal[(df_eksternal['PIC Responsible']=='Resto') 
-                     ].groupby(['Date PO'])[['Nomor PR+PO']].nunique().reset_index().rename(columns={'Nomor PR+PO':'Total'}).merge(df_eksternal[(df_eksternal['PIC Responsible']=='Resto') 
-                     & (df_eksternal['Kategori PR(Create)-PO(Datang)']=='Backdate')
-                     ].groupby(['Date PO'])[['Nomor PR+PO']].nunique().reset_index(), how='left')
-            df_line['Nomor PR+PO'] = (df_line['Nomor PR+PO']/df_line['Total'])*100
-            create_line_chart(df_line, x_column='Date PO', y_column='Nomor PR+PO', title="DAILY BACKDATE", key='line_2')
-        with col[2]:
-            df_bar = df_eksternal[ (df_eksternal['PIC Responsible']=='Resto') 
-                     & (df_eksternal['Kategori PR(Create)-PO(Datang)']=='Backdate')].groupby(['Rute'])[['Nomor PR+PO']].nunique().reset_index()
-            create_percentage_barchart(df_bar, 'Rute', 'Nomor PR+PO', key='bar_2')
-        with col[3]:
-            st.write('')
-            col2 = st.columns(3)
-            with col2[0]:
-                st.metric(label="Total", value="{:,.0f}".format(df_eksternal[ (df_eksternal['PIC Responsible']=='Resto') ]['Nomor PR+PO'].nunique()), delta=None)
-            with col2[1]:
-                st.metric(label="On-Time", value="{:,.0f}".format(df_pie[df_pie['Kategori PR(Create)-PO(Datang)']=='On-Time']['Nomor PR+PO'].values[0]), delta=None)
-            with col2[2]:
-                st.metric(label="Backdate", value="{:,.0f}".format(df_pie[df_pie['Kategori PR(Create)-PO(Datang)']=='Backdate']['Nomor PR+PO'].values[0]), delta=None)
-            
-            st.dataframe(df_eksternal[ (df_eksternal['PIC Responsible']=='Resto') 
-                     & (df_eksternal['Kategori PR(Create)-PO(Datang)']=='Backdate')].groupby(['Rute','PR(Create)-PO(Datang) Group'])[['Nomor PR+PO']].nunique().reset_index().pivot(index='Rute',columns='PR(Create)-PO(Datang) Group',values='Nomor PR+PO').reset_index().merge(
-                df_eksternal[ (df_eksternal['PIC Responsible']=='Resto') 
-                     & (df_eksternal['Kategori PR(Create)-PO(Datang)']=='Backdate')].groupby(['Rute'])[['Nomor PR+PO']].nunique().reset_index().rename(columns={'Nomor PR+PO':'Total'})
-                     ),
-                         hide_index=True)
-    
-    if kat_eksternal =='PO(Create)-PO(Datang)':
-        st.markdown('### Kategori PO(Create)-PO(Datang)')
-        st.write('PIC Responsible: Procurement')
-        st.write('Kategori Item: Logistic')
-        col = st.columns([1,2,1,2])
-        
-        with col[0]:
-            df_pie = df_eksternal[ (df_eksternal['PIC Responsible']=='Logistic') 
-                     ].groupby(['Kategori PO(Create)-PO(Datang)'])[['Nomor PO']].nunique().reset_index()
-            create_pie_chart(df_pie, labels_column='Kategori PO(Create)-PO(Datang)', values_column='Nomor PO', title="OUTGOING BACKDATE",key='pie_')
-        with col[1]:
-            df_line = df_eksternal[ (df_eksternal['PIC Responsible']=='Logistic')
-                     ].groupby(['Date PO'])[['Nomor PO']].nunique().reset_index().rename(columns={'Nomor PO':'Total'}).merge(df_eksternal[(df_eksternal['PIC Responsible']=='Logistic') 
-                     & (df_eksternal['Kategori PO(Create)-PO(Datang)']=='Backdate')
-                     ].groupby(['Date PO'])[['Nomor PO']].nunique().reset_index(), how='left')
-            df_line['Nomor PO'] = (df_line['Nomor PO']/df_line['Total'])*100
-            create_line_chart(df_line, x_column='Date PO', y_column='Nomor PO', title="DAILY BACKDATE",key='line_')
-        with col[2]:
-            df_bar = df_eksternal[ (df_eksternal['PIC Responsible']=='Logistic') &
-                     (df_eksternal['Kategori PO(Create)-PO(Datang)']=='Backdate')].groupby(['Rute'])[['Nomor PO']].nunique().reset_index()
-            create_percentage_barchart(df_bar, 'Rute', 'Nomor PO', key='bar_')
-        with col[3]:
-            st.write('')
-            col2 = st.columns(3)
-            with col2[0]:
-                st.metric(label="Total", value="{:,.0f}".format(df_eksternal[ (df_eksternal['PIC Responsible']=='Logistic') 
-                    ]['Nomor PO'].nunique()), delta=None)
-            with col2[1]:
-                st.metric(label="On-Time", value="{:,.0f}".format(df_pie[df_pie['Kategori PO(Create)-PO(Datang)']=='On-Time']['Nomor PO'].values[0]), delta=None)
-            with col2[2]:
-                st.metric(label="Backdate", value="{:,.0f}".format(df_pie[df_pie['Kategori PO(Create)-PO(Datang)']=='Backdate']['Nomor PO'].values[0]), delta=None)
-            
-            st.dataframe(df_eksternal[ (df_eksternal['PIC Responsible']=='Logistic') &
-                     (df_eksternal['Kategori PO(Create)-PO(Datang)']=='Backdate')].groupby(['Rute','PO(Create)-PO(Datang) Group'])[['Nomor PO']].nunique().reset_index().pivot(index='Rute',columns='PO(Create)-PO(Datang) Group',values='Nomor PO').reset_index().merge(
-                df_eksternal[ (df_eksternal['PIC Responsible']=='Logistic') &
-                     (df_eksternal['Kategori PO(Create)-PO(Datang)']=='Backdate')].groupby(['Rute'])[['Nomor PO']].nunique().reset_index().rename(columns={'Nomor PO':'Total'})
-                     ),
-                         hide_index=True)
-            
-        st.write('Kategori Item: Resto')
-        col = st.columns([1,2,1,2])
-        
-        with col[0]:
-            df_pie = df_eksternal[(df_eksternal['PIC Responsible']=='Resto') &
-                     (df_eksternal['Kategori Item']=='Eksternal Resto')].groupby(['Kategori PO(Create)-PO(Datang)'])[['Nomor PO']].nunique().reset_index()
-            create_pie_chart(df_pie, labels_column='Kategori PO(Create)-PO(Datang)', values_column='Nomor PO', title="OUTGOING BACKDATE", key='pie_1')
-        with col[1]:
-            df_line = df_eksternal[ (df_eksternal['PIC Responsible']=='Resto')
-                     ].groupby(['Date PO'])[['Nomor PO']].nunique().reset_index().rename(columns={'Nomor PO':'Total'}).merge(df_eksternal[(df_eksternal['PIC Responsible']=='Resto') 
-                     & (df_eksternal['Kategori PO(Create)-PO(Datang)']=='Backdate')
-                     ].groupby(['Date PO'])[['Nomor PO']].nunique().reset_index(), how='left')
-            df_line['Nomor PO'] = (df_line['Nomor PO']/df_line['Total'])*100
-            create_line_chart(df_line, x_column='Date PO', y_column='Nomor PO', title="DAILY BACKDATE",key='line_1')
-        with col[2]:
-            df_bar = df_eksternal[ (df_eksternal['PIC Responsible']=='Resto') &
-                     (df_eksternal['Kategori PO(Create)-PO(Datang)']=='Backdate') & (df_eksternal['Kategori Item']=='Eksternal Resto')].groupby(['Rute'])[['Nomor PO']].nunique().reset_index()
-            create_percentage_barchart(df_bar, 'Rute', 'Nomor PO', key='bar_1')
-        with col[3]:
-            st.write('')
-            col2 = st.columns(3)
-            with col2[0]:
-                st.metric(label="Total", value="{:,.0f}".format(df_eksternal[ (df_eksternal['PIC Responsible']=='Resto') 
-                    ]['Nomor PO'].nunique()), delta=None)
-            with col2[1]:
-                st.metric(label="On-Time", value="{:,.0f}".format(df_pie[df_pie['Kategori PO(Create)-PO(Datang)']=='On-Time']['Nomor PO'].values[0]), delta=None)
-            with col2[2]:
-                st.metric(label="Backdate", value="{:,.0f}".format(df_pie[df_pie['Kategori PO(Create)-PO(Datang)']=='Backdate']['Nomor PO'].values[0]), delta=None)
-            
-            st.dataframe(df_eksternal[ (df_eksternal['PIC Responsible']=='Resto') &
-                     (df_eksternal['Kategori PO(Create)-PO(Datang)']=='Backdate')].groupby(['Rute','PO(Create)-PO(Datang) Group'])[['Nomor PO']].nunique().reset_index().pivot(index='Rute',columns='PO(Create)-PO(Datang) Group',values='Nomor PO').reset_index().merge(
-                df_eksternal[ (df_eksternal['PIC Responsible']=='Resto') &
-                     (df_eksternal['Kategori PO(Create)-PO(Datang)']=='Backdate')].groupby(['Rute'])[['Nomor PO']].nunique().reset_index().rename(columns={'Nomor PO':'Total'})
-                     ),
-                         hide_index=True)
-    
-    if kat_eksternal =='RI(Date)-PO(Datang)':
-        st.markdown('### Kategori RI(Date)-PO(Datang)')
-        st.write('PIC Responsible: Procurement')
-        st.write('Kategori Item: Logistic')
-        col = st.columns([1,2,1,2])
-        
-        with col[0]:
-            df_pie = df_eksternal[ (df_eksternal['PIC Responsible']=='Logistic') 
-                     ].groupby(['Kategori RI(Date)-PO(Datang)'])[['Nomor PO']].nunique().reset_index()
-            create_pie_chart(df_pie, labels_column='Kategori RI(Date)-PO(Datang)', values_column='Nomor PO', title="OUTGOING BACKDATE",key='pie_')
-        with col[1]:
-            df_line = df_eksternal[ (df_eksternal['PIC Responsible']=='Logistic')
-                     ].groupby(['Date PO'])[['Nomor PO']].nunique().reset_index().rename(columns={'Nomor PO':'Total'}).merge(df_eksternal[(df_eksternal['PIC Responsible']=='Logistic') 
-                     & (df_eksternal['Kategori RI(Date)-PO(Datang)']=='Backdate')
-                     ].groupby(['Date PO'])[['Nomor PO']].nunique().reset_index(), how='left')
-            df_line['Nomor PO'] = (df_line['Nomor PO']/df_line['Total'])*100
-            create_line_chart(df_line, x_column='Date PO', y_column='Nomor PO', title="DAILY BACKDATE",key='line_')
-        with col[2]:
-            df_bar = df_eksternal[ (df_eksternal['PIC Responsible']=='Logistic') &
-                     (df_eksternal['Kategori RI(Date)-PO(Datang)']=='Backdate')].groupby(['Rute'])[['Nomor PO']].nunique().reset_index()
-            create_percentage_barchart(df_bar, 'Rute', 'Nomor PO', key='bar_')
-        with col[3]:
-            st.write('')
-            col2 = st.columns(3)
-            with col2[0]:
-                st.metric(label="Total", value="{:,.0f}".format(df_eksternal[ (df_eksternal['PIC Responsible']=='Logistic') 
-                    ]['Nomor PO'].nunique()), delta=None)
-            with col2[1]:
-                st.metric(label="On-Time", value="{:,.0f}".format(df_pie[df_pie['Kategori RI(Date)-PO(Datang)']=='On-Time']['Nomor PO'].values[0]), delta=None)
-            with col2[2]:
-                st.metric(label="Backdate", value="{:,.0f}".format(df_pie[df_pie['Kategori RI(Date)-PO(Datang)']=='Backdate']['Nomor PO'].values[0]), delta=None)
-            
-            st.dataframe(df_eksternal[ (df_eksternal['PIC Responsible']=='Logistic') &
-                     (df_eksternal['Kategori RI(Date)-PO(Datang)']=='Backdate')].groupby(['Rute','RI(Date)-PO(Datang) Group'])[['Nomor PO']].nunique().reset_index().pivot(index='Rute',columns='RI(Date)-PO(Datang) Group',values='Nomor PO').reset_index().merge(
-                df_eksternal[ (df_eksternal['PIC Responsible']=='Logistic') &
-                     (df_eksternal['Kategori RI(Date)-PO(Datang)']=='Backdate')].groupby(['Rute'])[['Nomor PO']].nunique().reset_index().rename(columns={'Nomor PO':'Total'})
-                     ),
-                         hide_index=True)
-            
-        st.write('Kategori Item: Resto')
-        col = st.columns([1,2,1,2])
-        
-        with col[0]:
-            df_pie = df_eksternal[(df_eksternal['PIC Responsible']=='Resto') &
-                     (df_eksternal['Kategori Item']=='Eksternal Resto')].groupby(['Kategori RI(Date)-PO(Datang)'])[['Nomor PO']].nunique().reset_index()
-            create_pie_chart(df_pie, labels_column='Kategori RI(Date)-PO(Datang)', values_column='Nomor PO', title="OUTGOING BACKDATE", key='pie_1')
-        with col[1]:
-            df_line = df_eksternal[ (df_eksternal['PIC Responsible']=='Resto')
-                     ].groupby(['Date PO'])[['Nomor PO']].nunique().reset_index().rename(columns={'Nomor PO':'Total'}).merge(df_eksternal[(df_eksternal['PIC Responsible']=='Resto') 
-                     & (df_eksternal['Kategori RI(Date)-PO(Datang)']=='Backdate')
-                     ].groupby(['Date PO'])[['Nomor PO']].nunique().reset_index(), how='left')
-            df_line['Nomor PO'] = (df_line['Nomor PO']/df_line['Total'])*100
-            create_line_chart(df_line, x_column='Date PO', y_column='Nomor PO', title="DAILY BACKDATE",key='line_1')
-        with col[2]:
-            df_bar = df_eksternal[ (df_eksternal['PIC Responsible']=='Resto') &
-                     (df_eksternal['Kategori RI(Date)-PO(Datang)']=='Backdate') & (df_eksternal['Kategori Item']=='Eksternal Resto')].groupby(['Rute'])[['Nomor PO']].nunique().reset_index()
-            create_percentage_barchart(df_bar, 'Rute', 'Nomor PO', key='bar_1')
-        with col[3]:
-            st.write('')
-            col2 = st.columns(3)
-            with col2[0]:
-                st.metric(label="Total", value="{:,.0f}".format(df_eksternal[ (df_eksternal['PIC Responsible']=='Resto') 
-                    ]['Nomor PO'].nunique()), delta=None)
-            with col2[1]:
-                st.metric(label="On-Time", value="{:,.0f}".format(df_pie[df_pie['Kategori RI(Date)-PO(Datang)']=='On-Time']['Nomor PO'].values[0]), delta=None)
-            with col2[2]:
-                st.metric(label="Backdate", value="{:,.0f}".format(df_pie[df_pie['Kategori RI(Date)-PO(Datang)']=='Backdate']['Nomor PO'].values[0]), delta=None)
-            
-            st.dataframe(df_eksternal[ (df_eksternal['PIC Responsible']=='Resto') &
-                     (df_eksternal['Kategori RI(Date)-PO(Datang)']=='Backdate')].groupby(['Rute','RI(Date)-PO(Datang) Group'])[['Nomor PO']].nunique().reset_index().pivot(index='Rute',columns='RI(Date)-PO(Datang) Group',values='Nomor PO').reset_index().merge(
-                df_eksternal[ (df_eksternal['PIC Responsible']=='Resto') &
-                     (df_eksternal['Kategori RI(Date)-PO(Datang)']=='Backdate')].groupby(['Rute'])[['Nomor PO']].nunique().reset_index().rename(columns={'Nomor PO':'Total'})
-                     ),
-                         hide_index=True)
+        if cab != 'All' :
+            df_vendor = df_test[(df_test['Nama Cabang']==cab)&(df_test['PIC'].isin(df_test['PIC'].unique() if pic=='All' else [pic]))].groupby(['Month','Pemasok','Kategori Pemasok','Kode #']).agg({'#Prime.Qty': 'sum','#Purch.Total': 'sum','min':'min','max':'max'}).reset_index()
+            df_test = df_test[(df_test['Nama Cabang']==cab)&(df_test['PIC'].isin(df_test['PIC'].unique() if pic=='All' else [pic]))].groupby(['Month','Kode #']).agg({'#Prime.Qty': 'sum','#Purch.Total': 'sum'}).reset_index()
+        else:
+            df_vendor = df_test[(df_test['PIC'].isin(df_test['PIC'].unique() if pic=='All' else [pic]))].groupby(['Month','Pemasok','Kategori Pemasok','Kode #']).agg({'#Prime.Qty': 'sum','#Purch.Total': 'sum','min':'min','max':'max'}).reset_index()   
+            df_test = df_test[(df_test['PIC'].isin(df_test['PIC'].unique() if pic=='All' else [pic]))].groupby(['Month','Kode #']).agg({'#Prime.Qty': 'sum','#Purch.Total': 'sum'}).reset_index()        
 
-    if kat_eksternal =='RI(Date)-RI(Create)':
-        st.markdown('### Kategori RI(Date)-RI(Create)')
-        st.write('PIC Responsible: Resto')
-        st.write('Kategori Item: Eksternal Logistic')
-        col = st.columns([1,2,1,2])
-        
-        with col[0]:
-            df_pie = df_eksternal2[ 
-                     (df_eksternal2['Kategori Item']=='Eksternal Logistic')].groupby(['Kategori RI(Date)-RI(Create)'])[['Nomor PO+RI']].nunique().reset_index()
-            create_pie_chart(df_pie, labels_column='Kategori RI(Date)-RI(Create)', values_column='Nomor PO+RI', title="OUTGOING BACKDATE", key='pie_')
-        with col[1]:
-            df_line = df_eksternal2[(df_eksternal2['Kategori Item']=='Eksternal Logistic')
-                     ].groupby(['Date PO'])[['Nomor PO+RI']].nunique().reset_index().rename(columns={'Nomor PO+RI':'Total'}).merge(df_eksternal2[ 
-                      (df_eksternal2['Kategori RI(Date)-RI(Create)']=='Backdate') & (df_eksternal2['Kategori Item']=='Eksternal Logistic')
-                     ].groupby(['Date PO'])[['Nomor PO+RI']].nunique().reset_index(), how='left')
-            df_line['Nomor PO+RI'] = (df_line['Nomor PO+RI']/df_line['Total'])*100
-            create_line_chart(df_line, x_column='Date PO', y_column='Nomor PO+RI', title="DAILY BACKDATE",key='line_')
-        with col[2]:
-            df_bar = df_eksternal2[
-                     (df_eksternal2['Kategori RI(Date)-RI(Create)']=='Backdate') & (df_eksternal2['Kategori Item']=='Eksternal Logistic')].groupby(['Rute'])[['Nomor PO+RI']].nunique().reset_index()
-            create_percentage_barchart(df_bar, 'Rute', 'Nomor PO+RI',key='bar_')
-        with col[3]:
-            st.write('')
-            col2 = st.columns(3)
-            with col2[0]:
-                st.metric(label="Total", value="{:,.0f}".format(df_eksternal2[ (df_eksternal2['PIC Responsible']=='Logistic') 
-                     & (df_eksternal2['Kategori Item']=='Eksternal Logistic')]['Nomor PO+RI'].nunique()), delta=None)
-            with col2[1]:
-                st.metric(label="On-Time", value="{:,.0f}".format(df_pie[df_pie['Kategori RI(Date)-RI(Create)']=='On-Time']['Nomor PO+RI'].values[0]), delta=None)
-            with col2[2]:
-                st.metric(label="Backdate", value="{:,.0f}".format(df_pie[df_pie['Kategori RI(Date)-RI(Create)']=='Backdate']['Nomor PO+RI'].values[0]), delta=None)
-            
-            st.dataframe(df_eksternal2[ (df_eksternal2['PIC Responsible']=='Logistic') &
-                     (df_eksternal2['Kategori RI(Date)-RI(Create)']=='Backdate') & (df_eksternal2['Kategori Item']=='Eksternal Logistic')].groupby(['Rute','RI(Date)-RI(Create) Group'])[['Nomor PO+RI']].nunique().reset_index().pivot(index='Rute',columns='RI(Date)-RI(Create) Group',values='Nomor PO+RI').reset_index().merge(
-                df_eksternal2[ (df_eksternal2['PIC Responsible']=='Logistic') &
-                     (df_eksternal2['Kategori RI(Date)-RI(Create)']=='Backdate') & (df_eksternal2['Kategori Item']=='Eksternal Logistic')].groupby(['Rute'])[['Nomor PO+RI']].nunique().reset_index().rename(columns={'Nomor PO+RI':'Total'})
-                     ),
-                         hide_index=True)
-            
-        st.write('Kategori Item: Eksternal Resto')
-        col = st.columns([1,2,1,2])
-        
-        with col[0]:
-            df_pie = df_eksternal2[ 
-                      (df_eksternal2['Kategori Item']=='Eksternal Resto')].groupby(['Kategori RI(Date)-RI(Create)'])[['Nomor PO+RI']].nunique().reset_index()
-            create_pie_chart(df_pie, labels_column='Kategori RI(Date)-RI(Create)', values_column='Nomor PO+RI', title="OUTGOING BACKDATE",key='pie_1')
-        with col[1]:
-            df_line = df_eksternal2[(df_eksternal2['Kategori Item']=='Eksternal Resto')
-                     ].groupby(['Date PO'])[['Nomor PO+RI']].nunique().reset_index().rename(columns={'Nomor PO+RI':'Total'}).merge(df_eksternal2[ 
-                      (df_eksternal2['Kategori RI(Date)-RI(Create)']=='Backdate') & (df_eksternal2['Kategori Item']=='Eksternal Resto')
-                     ].groupby(['Date PO'])[['Nomor PO+RI']].nunique().reset_index(), how='left')
-            df_line['Nomor PO+RI'] = (df_line['Nomor PO+RI']/df_line['Total'])*100
-            create_line_chart(df_line, x_column='Date PO', y_column='Nomor PO+RI', title="DAILY BACKDATE",key='line_1')
-        with col[2]:
-            df_bar = df_eksternal2[
-                     (df_eksternal2['Kategori RI(Date)-RI(Create)']=='Backdate') & (df_eksternal2['Kategori Item']=='Eksternal Resto')].groupby(['Rute'])[['Nomor PO+RI']].nunique().reset_index()
-            create_percentage_barchart(df_bar, 'Rute', 'Nomor PO+RI',key='bar_1')
-        with col[3]:
-            st.write('')
-            col2 = st.columns(3)
-            with col2[0]:
-                st.metric(label="Total", value="{:,.0f}".format(df_eksternal2[  
-                     (df_eksternal2['Kategori Item']=='Eksternal Resto')]['Nomor PO+RI'].nunique()), delta=None)
-            with col2[1]:
-                st.metric(label="On-Time", value="{:,.0f}".format(df_pie[df_pie['Kategori RI(Date)-RI(Create)']=='On-Time']['Nomor PO+RI'].values[0]), delta=None)
-            with col2[2]:
-                st.metric(label="Backdate", value="{:,.0f}".format(df_pie[df_pie['Kategori RI(Date)-RI(Create)']=='Backdate']['Nomor PO+RI'].values[0]), delta=None)
-            
-            st.dataframe(df_eksternal2[
-                     (df_eksternal2['Kategori RI(Date)-RI(Create)']=='Backdate') & (df_eksternal2['Kategori Item']=='Eksternal Resto')].groupby(['Rute','RI(Date)-RI(Create) Group'])[['Nomor PO+RI']].nunique().reset_index().pivot(index='Rute',columns='RI(Date)-RI(Create) Group',values='Nomor PO+RI').reset_index().merge(
-                df_eksternal2[ 
-                     (df_eksternal2['Kategori RI(Date)-RI(Create)']=='Backdate') & (df_eksternal2['Kategori Item']=='Eksternal Resto')].groupby(['Rute'])[['Nomor PO+RI']].nunique().reset_index().rename(columns={'Nomor PO+RI':'Total'})
-                     ),
-                         hide_index=True)
-        
-        st.write('PIC Responsible: WH/CK')
-        st.write('Kategori Item: Internal Logistic')
-        col = st.columns([1,2,1,2])
-        
-        with col[0]:
-            df_pie = df_eksternal2[ 
-                     (df_eksternal2['Kategori Item']=='Internal Logistic')].groupby(['Kategori RI(Date)-RI(Create)'])[['Nomor PO+RI']].nunique().reset_index()
-            create_pie_chart(df_pie, labels_column='Kategori RI(Date)-RI(Create)', values_column='Nomor PO+RI', title="OUTGOING BACKDATE",key='pie_2')
-        with col[1]:
-            df_line = df_eksternal2[(df_eksternal2['Kategori Item']=='Internal Logistic')
-                     ].groupby(['Date PO'])[['Nomor PO+RI']].nunique().reset_index().rename(columns={'Nomor PO+RI':'Total'}).merge(df_eksternal2[ 
-                      (df_eksternal2['Kategori RI(Date)-RI(Create)']=='Backdate') & (df_eksternal2['Kategori Item']=='Internal Logistic')
-                     ].groupby(['Date PO'])[['Nomor PO+RI']].nunique().reset_index(), how='left')
-            df_line['Nomor PO+RI'] = (df_line['Nomor PO+RI']/df_line['Total'])*100
-            create_line_chart(df_line, x_column='Date PO', y_column='Nomor PO+RI', title="DAILY BACKDATE",key='line_2')
-        with col[2]:
-            df_bar = df_eksternal2[
-                     (df_eksternal2['Kategori RI(Date)-RI(Create)']=='Backdate') & (df_eksternal2['Kategori Item']=='Internal Logistic')].groupby(['Rute'])[['Nomor PO+RI']].nunique().reset_index()
-            create_percentage_barchart(df_bar, 'Rute', 'Nomor PO+RI', key='bar_2')
-        with col[3]:
-            st.write('')
-            col2 = st.columns(3)
-            with col2[0]:
-                st.metric(label="Total", value="{:,.0f}".format(df_eksternal2[  
-                     (df_eksternal2['Kategori Item']=='Internal Logistic')]['Nomor PO+RI'].nunique()), delta=None)
-            with col2[1]:
-                st.metric(label="On-Time", value="{:,.0f}".format(df_pie[df_pie['Kategori RI(Date)-RI(Create)']=='On-Time']['Nomor PO+RI'].values[0]), delta=None)
-            with col2[2]:
-                st.metric(label="Backdate", value="{:,.0f}".format(df_pie[df_pie['Kategori RI(Date)-RI(Create)']=='Backdate']['Nomor PO+RI'].values[0]), delta=None)
-            
-            st.dataframe(df_eksternal2[
-                     (df_eksternal2['Kategori RI(Date)-RI(Create)']=='Backdate') & (df_eksternal2['Kategori Item']=='Internal Logistic')].groupby(['Rute','RI(Date)-RI(Create) Group'])[['Nomor PO+RI']].nunique().reset_index().pivot(index='Rute',columns='RI(Date)-RI(Create) Group',values='Nomor PO+RI').reset_index().merge(
-                df_eksternal2[ 
-                     (df_eksternal2['Kategori RI(Date)-RI(Create)']=='Backdate') & (df_eksternal2['Kategori Item']=='Internal Logistic')].groupby(['Rute'])[['Nomor PO+RI']].nunique().reset_index().rename(columns={'Nomor PO+RI':'Total'})
-                     ),
-                         hide_index=True)
-            
+        df_vendor['WEIGHT AVG (PRICE)'] = df_vendor['#Purch.Total'].astype(float)/df_vendor['#Prime.Qty'].astype(float)
+        df_vendor = df_vendor.rename(columns={'#Prime.Qty':'QUANTITY'}).drop(columns='#Purch.Total')
+        df_vendor = df_vendor.merge(db.drop_duplicates(), how='left', on='Kode #')
+        df_vendor['Filter Barang'] = df_vendor['Kode #'].astype(str) + ' - ' + df_vendor['Nama Barang']
     
-    data = {
-        "Tanggal": pd.date_range(start="2024-01-01", end="2025-12-31", freq="D"),
-        "Penjualan": range(1, 732)
-    }
-    df = pd.DataFrame(data)
+        df_vendor = df_vendor.groupby(['Month','Pemasok','Kategori Pemasok','Kode #','Nama Barang','Filter Barang']).agg({'QUANTITY': 'sum','WEIGHT AVG (PRICE)': 'mean','min':'min','max':'max'}).reset_index()  
+        df_vendor['Month'] = pd.Categorical(df_vendor['Month'], categories=list_bulan, ordered=True)
+        df_vendor = df_vendor.sort_values('Month')
+        
+        df_test['WEIGHT AVG (PRICE)'] = df_test['#Purch.Total'].astype(float)/df_test['#Prime.Qty'].astype(float)
+        df_test = df_test.rename(columns={'#Prime.Qty':'QUANTITY'}).drop(columns='#Purch.Total')
+        df_test = df_test.merge(db.drop_duplicates(), how='left', on='Kode #')
+        df_test['Filter Barang'] = df_test['Kode #'].astype(str) + ' - ' + df_test['Nama Barang']
     
+        df_test = df_test.groupby(['Month', 'Kode #','Nama Barang','Filter Barang']).agg({'QUANTITY': 'sum','WEIGHT AVG (PRICE)': 'mean'}).reset_index()  
+        df_test['Month'] = pd.Categorical(df_test['Month'], categories=list_bulan, ordered=True)
+        df_test = df_test.sort_values('Month')
+        df_test = df_test.pivot(index=['Kode #','Nama Barang','Filter Barang'],columns='Month',values=wa_qty).fillna('').reset_index()
+        
+        if len(bulan)>=3:
+            df_test[f'Diff {bulan[-3]} - {bulan[-2]}'] = df_test.apply(lambda row: 0 if ((row[bulan[-2]] == '') or (row[bulan[-3]]=='') or (row[bulan[-3]]==0)) else ((row[bulan[-2]] - row[bulan[-3]]) / row[bulan[-3]]), axis=1)
+            df_test[f'Diff {bulan[-2]} - {bulan[-1]}'] = df_test.apply(lambda row: 0 if ((row[bulan[-1]] == '') or (row[bulan[-2]]=='') or (row[bulan[-2]]==0)) else ((row[bulan[-1]] - row[bulan[-2]]) / row[bulan[-2]]), axis=1)
+            df_test = df_test.sort_values(df_test.columns[-1],ascending=False) 
+            #df_test.loc[:,df_test.columns[-2:]] = df_test.loc[:,df_test.columns[-2:]].applymap(lambda x: f'{x*100:.2f}%')
+        if len(bulan)==2:
+            df_test[f'Diff {bulan[-2]} - {bulan[-1]}'] = df_test.apply(lambda row: 0 if ((row[bulan[-1]] == '') or (row[bulan[-2]]=='') or (row[bulan[-2]]==0)) else ((row[bulan[-1]] - row[bulan[-2]]) / row[bulan[-2]]), axis=1)
+            df_test = df_test.sort_values(df_test.columns[-1],ascending=False)
+            #df_test.loc[:,df_test.columns[-1]] = df_test.loc[:,df_test.columns[-1:]].apply(lambda x: f'{x*100:.2f}%')
+        
+        if category=='TOP':
+            if len(bulan)>=3:
+                df_test2 = df_test[(df_test[df_test.columns[-1]]>0) & (df_test[df_test.columns[-2]]>0)]
+                df_test2 = df_test2.loc[((df_test2[df_test2.columns[-1]] + df_test2[df_test2.columns[-2]]) / 2).sort_values(ascending=False).index].head(10)
+            if len(bulan)==2:
+                df_test2 = df_test[(df_test[df_test.columns[-1]]>0)].head(10)
+            
+        if category=='BOTTOM':
+            if len(bulan)>=3:
+                df_test2 = df_test[(df_test[df_test.columns[-1]]<0) & (df_test[df_test.columns[-2]]<0)]
+                df_test2 = df_test2.loc[((df_test2[df_test2.columns[-1]] + df_test2[df_test2.columns[-2]]) / 2).sort_values(ascending=True).index].head(10)
+            if len(bulan)==2:
+                df_test2 = df_test[(df_test[df_test.columns[-1]]<0)].head(10)       
+        
     
-    # Widget untuk memilih rentang tanggal
-    start_date, end_date = st.date_input(
-        "RANGE DATE ",
-        [df["Tanggal"].min(), df["Tanggal"].max()],  # Default nilai awal
-        min_value=df["Tanggal"].min(),
-        max_value=df["Tanggal"].max()
-    )
-    
-    df_tanggal = pd.DataFrame(pd.date_range(start=pd.Timestamp(start_date), end=pd.Timestamp(end_date), freq='D'), columns=['Tanggal'])
-    
-    if kat_eksternal =='PR(Create)-PO(Datang)':
-        st.markdown('### PR(Create)-PO(Datang)')
-        st.write('PIC Responsible: Logistic')
-        st.write('Kategori Item: Eksternal Logistic')
-        col = st.columns([1,2,1,2])
-        
-        with col[0]:
-            df_pie = df_eksternal[(df_eksternal["Tanggal PO"] >= pd.Timestamp(start_date)) & (df_eksternal["Tanggal PO"] <= pd.Timestamp(end_date)) & (df_eksternal['PIC Responsible']=='Logistic') 
-                     & (df_eksternal['Kategori Item']=='Eksternal Logistic')].groupby(['Kategori PR(Create)-PO(Datang)'])[['Nomor PO']].nunique().reset_index()
-            create_pie_chart(df_pie, labels_column='Kategori PR(Create)-PO(Datang)', values_column='Nomor PO', title="OUTGOING BACKDATE")
-        with col[1]:
-            df_line = df_eksternal[(df_eksternal["Tanggal PO"] >= pd.Timestamp(start_date)) & (df_eksternal["Tanggal PO"] <= pd.Timestamp(end_date)) & (df_eksternal['PIC Responsible']=='Logistic') 
-                     & (df_eksternal['Kategori PR(Create)-PO(Datang)']=='Backdate') & (df_eksternal['Kategori Item']=='Eksternal Logistic')
-                     ].groupby(['Tanggal PO'])[['Nomor PO']].nunique().reset_index()
-            df_line = df_tanggal.merge(df_line,how='left',left_on='Tanggal',right_on='Tanggal PO').fillna(0)
-            create_line_chart(df_line, x_column='Tanggal', y_column='Nomor PO', title="DAILY BACKDATE")
-        with col[2]:
-            df_bar = df_eksternal[(df_eksternal["Tanggal PO"] >= pd.Timestamp(start_date)) & (df_eksternal["Tanggal PO"] <= pd.Timestamp(end_date)) & (df_eksternal['PIC Responsible']=='Logistic') 
-                     & (df_eksternal['Kategori PR(Create)-PO(Datang)']=='Backdate') & (df_eksternal['Kategori Item']=='Eksternal Logistic')].groupby(['Rute'])[['Nomor PO']].nunique().reset_index()
-            create_percentage_barchart(df_bar, 'Rute', 'Nomor PO')
-        with col[3]:
-            st.write('')
-            col2 = st.columns(3)
-            with col2[0]:
-                st.metric(label="Total", value="{:,.0f}".format(df_eksternal[(df_eksternal["Tanggal PO"] >= pd.Timestamp(start_date)) & (df_eksternal["Tanggal PO"] <= pd.Timestamp(end_date)) & (df_eksternal['PIC Responsible']=='Logistic') 
-                     & (df_eksternal['Kategori Item']=='Eksternal Logistic')]['Nomor PO'].nunique()), delta=None)
-            with col2[1]:
-                st.metric(label="On-Time", value="{:,.0f}".format(df_pie[df_pie['Kategori PR(Create)-PO(Datang)']=='On-Time']['Nomor PO'].values[0]), delta=None)
-            with col2[2]:
-                st.metric(label="Backdate", value="{:,.0f}".format(df_pie[df_pie['Kategori PR(Create)-PO(Datang)']=='Backdate']['Nomor PO'].values[0]), delta=None)
-            
-            st.dataframe(df_eksternal[(df_eksternal["Tanggal PO"] >= pd.Timestamp(start_date)) & (df_eksternal["Tanggal PO"] <= pd.Timestamp(end_date)) & (df_eksternal['PIC Responsible']=='Logistic') 
-                     & (df_eksternal['Kategori PR(Create)-PO(Datang)']=='Backdate') & (df_eksternal['Kategori Item']=='Eksternal Logistic')].groupby(['Rute','PR(Create)-PO(Datang) Group'])[['Nomor PO']].nunique().reset_index().pivot(index='Rute',columns='PR(Create)-PO(Datang) Group',values='Nomor PO').reset_index().merge(
-                df_eksternal[(df_eksternal["Tanggal PO"] >= pd.Timestamp(start_date)) & (df_eksternal["Tanggal PO"] <= pd.Timestamp(end_date)) & (df_eksternal['PIC Responsible']=='Logistic') 
-                     & (df_eksternal['Kategori PR(Create)-PO(Datang)']=='Backdate') & (df_eksternal['Kategori Item']=='Eksternal Logistic')].groupby(['Rute'])[['Nomor PO']].nunique().reset_index().rename(columns={'Nomor PO':'Total'})
-                     ),
-                         hide_index=True)
-        
-        st.write('Kategori Item: Internal Logistic')
-        col = st.columns([1,2,1,2])
-        
-        with col[0]:
-            df_pie = df_eksternal[(df_eksternal["Tanggal PO"] >= pd.Timestamp(start_date)) & (df_eksternal["Tanggal PO"] <= pd.Timestamp(end_date)) & (df_eksternal['PIC Responsible']=='Logistic') 
-                     & (df_eksternal['Kategori Item']=='Internal Logistic')].groupby(['Kategori PR(Create)-PO(Datang)'])[['Nomor PO']].nunique().reset_index()
-            create_pie_chart(df_pie, labels_column='Kategori PR(Create)-PO(Datang)', values_column='Nomor PO', title="OUTGOING BACKDATE")
-        with col[1]:
-            df_line = df_eksternal[(df_eksternal["Tanggal PO"] >= pd.Timestamp(start_date)) & (df_eksternal["Tanggal PO"] <= pd.Timestamp(end_date)) & (df_eksternal['PIC Responsible']=='Logistic') 
-                     & (df_eksternal['Kategori PR(Create)-PO(Datang)']=='Backdate') & (df_eksternal['Kategori Item']=='Internal Logistic')
-                     ].groupby(['Tanggal PO'])[['Nomor PO']].nunique().reset_index()
-            df_line = df_tanggal.merge(df_line,how='left',left_on='Tanggal',right_on='Tanggal PO').fillna(0)
-            create_line_chart(df_line, x_column='Tanggal', y_column='Nomor PO', title="DAILY BACKDATE")
-        with col[2]:
-            df_bar = df_eksternal[(df_eksternal["Tanggal PO"] >= pd.Timestamp(start_date)) & (df_eksternal["Tanggal PO"] <= pd.Timestamp(end_date)) & (df_eksternal['PIC Responsible']=='Logistic') 
-                     & (df_eksternal['Kategori PR(Create)-PO(Datang)']=='Backdate') & (df_eksternal['Kategori Item']=='Internal Logistic')].groupby(['Rute'])[['Nomor PO']].nunique().reset_index()
-            create_percentage_barchart(df_bar, 'Rute', 'Nomor PO')
-        with col[3]:
-            st.write('')
-            col2 = st.columns(3)
-            with col2[0]:
-                st.metric(label="Total", value="{:,.0f}".format(df_eksternal[(df_eksternal["Tanggal PO"] >= pd.Timestamp(start_date)) & (df_eksternal["Tanggal PO"] <= pd.Timestamp(end_date)) & (df_eksternal['PIC Responsible']=='Logistic') 
-                     & (df_eksternal['Kategori Item']=='Internal Logistic')]['Nomor PO'].nunique()), delta=None)
-            with col2[1]:
-                st.metric(label="On-Time", value="{:,.0f}".format(df_pie[df_pie['Kategori PR(Create)-PO(Datang)']=='On-Time']['Nomor PO'].values[0]), delta=None)
-            with col2[2]:
-                st.metric(label="Backdate", value="{:,.0f}".format(df_pie[df_pie['Kategori PR(Create)-PO(Datang)']=='Backdate']['Nomor PO'].values[0]), delta=None)
-            
-            st.dataframe(df_eksternal[(df_eksternal["Tanggal PO"] >= pd.Timestamp(start_date)) & (df_eksternal["Tanggal PO"] <= pd.Timestamp(end_date)) & (df_eksternal['PIC Responsible']=='Logistic') 
-                     & (df_eksternal['Kategori PR(Create)-PO(Datang)']=='Backdate') & (df_eksternal['Kategori Item']=='Internal Logistic')].groupby(['Rute','PR(Create)-PO(Datang) Group'])[['Nomor PO']].nunique().reset_index().pivot(index='Rute',columns='PR(Create)-PO(Datang) Group',values='Nomor PO').reset_index().merge(
-                df_eksternal[(df_eksternal["Tanggal PO"] >= pd.Timestamp(start_date)) & (df_eksternal["Tanggal PO"] <= pd.Timestamp(end_date)) & (df_eksternal['PIC Responsible']=='Logistic') 
-                     & (df_eksternal['Kategori PR(Create)-PO(Datang)']=='Backdate') & (df_eksternal['Kategori Item']=='Internal Logistic')].groupby(['Rute'])[['Nomor PO']].nunique().reset_index().rename(columns={'Nomor PO':'Total'})
-                     ),
-                         hide_index=True)
-            
-        st.write('Kategori Item: Resto')
-        col = st.columns([1,2,1,2])
-        
-        with col[0]:
-            df_pie = df_eksternal[(df_eksternal["Tanggal PO"] >= pd.Timestamp(start_date)) & (df_eksternal["Tanggal PO"] <= pd.Timestamp(end_date)) & (df_eksternal['PIC Responsible']=='Resto') 
-                     ].groupby(['Kategori PR(Create)-PO(Datang)'])[['Nomor PO']].nunique().reset_index()
-            create_pie_chart(df_pie, labels_column='Kategori PR(Create)-PO(Datang)', values_column='Nomor PO', title="OUTGOING BACKDATE")
-        with col[1]:
-            df_line = df_eksternal[(df_eksternal["Tanggal PO"] >= pd.Timestamp(start_date)) & (df_eksternal["Tanggal PO"] <= pd.Timestamp(end_date)) & (df_eksternal['PIC Responsible']=='Resto') 
-                     & (df_eksternal['Kategori PR(Create)-PO(Datang)']=='Backdate')
-                     ].groupby(['Tanggal PO'])[['Nomor PO']].nunique().reset_index()
-            df_line = df_tanggal.merge(df_line,how='left',left_on='Tanggal',right_on='Tanggal PO').fillna(0)
-            create_line_chart(df_line, x_column='Tanggal', y_column='Nomor PO', title="DAILY BACKDATE")
-        with col[2]:
-            df_bar = df_eksternal[(df_eksternal["Tanggal PO"] >= pd.Timestamp(start_date)) & (df_eksternal["Tanggal PO"] <= pd.Timestamp(end_date)) & (df_eksternal['PIC Responsible']=='Resto') 
-                     & (df_eksternal['Kategori PR(Create)-PO(Datang)']=='Backdate')].groupby(['Rute'])[['Nomor PO']].nunique().reset_index()
-            create_percentage_barchart(df_bar, 'Rute', 'Nomor PO')
-        with col[3]:
-            st.write('')
-            col2 = st.columns(3)
-            with col2[0]:
-                st.metric(label="Total", value="{:,.0f}".format(df_eksternal[(df_eksternal["Tanggal PO"] >= pd.Timestamp(start_date)) & (df_eksternal["Tanggal PO"] <= pd.Timestamp(end_date)) & (df_eksternal['PIC Responsible']=='Resto') ]['Nomor PO'].nunique()), delta=None)
-            with col2[1]:
-                st.metric(label="On-Time", value="{:,.0f}".format(df_pie[df_pie['Kategori PR(Create)-PO(Datang)']=='On-Time']['Nomor PO'].values[0]), delta=None)
-            with col2[2]:
-                st.metric(label="Backdate", value="{:,.0f}".format(df_pie[df_pie['Kategori PR(Create)-PO(Datang)']=='Backdate']['Nomor PO'].values[0]), delta=None)
-            
-            st.dataframe(df_eksternal[(df_eksternal["Tanggal PO"] >= pd.Timestamp(start_date)) & (df_eksternal["Tanggal PO"] <= pd.Timestamp(end_date)) & (df_eksternal['PIC Responsible']=='Resto') 
-                     & (df_eksternal['Kategori PR(Create)-PO(Datang)']=='Backdate')].groupby(['Rute','PR(Create)-PO(Datang) Group'])[['Nomor PO']].nunique().reset_index().pivot(index='Rute',columns='PR(Create)-PO(Datang) Group',values='Nomor PO').reset_index().merge(
-                df_eksternal[(df_eksternal["Tanggal PO"] >= pd.Timestamp(start_date)) & (df_eksternal["Tanggal PO"] <= pd.Timestamp(end_date)) & (df_eksternal['PIC Responsible']=='Resto') 
-                     & (df_eksternal['Kategori PR(Create)-PO(Datang)']=='Backdate')].groupby(['Rute'])[['Nomor PO']].nunique().reset_index().rename(columns={'Nomor PO':'Total'})
-                     ),
-                         hide_index=True)
-    
-    if kat_eksternal =='PO(Create)-PO(Datang)':
-        st.markdown('### Kategori PO(Create)-PO(Datang)')
-        st.write('PIC Responsible: Procurement')
-        st.write('Kategori Item: Logistic')
-        col = st.columns([1,2,1,2])
-        
-        with col[0]:
-            df_pie = df_eksternal[(df_eksternal["Tanggal PO"] >= pd.Timestamp(start_date)) & (df_eksternal["Tanggal PO"] <= pd.Timestamp(end_date)) & (df_eksternal['PIC Responsible']=='Logistic') 
-                     ].groupby(['Kategori PO(Create)-PO(Datang)'])[['Nomor PO']].nunique().reset_index()
-            create_pie_chart(df_pie, labels_column='Kategori PO(Create)-PO(Datang)', values_column='Nomor PO', title="OUTGOING BACKDATE")
-        with col[1]:
-            df_line = df_eksternal[(df_eksternal["Tanggal PO"] >= pd.Timestamp(start_date)) & (df_eksternal["Tanggal PO"] <= pd.Timestamp(end_date)) & (df_eksternal['PIC Responsible']=='Logistic') 
-                     & (df_eksternal['Kategori PO(Create)-PO(Datang)']=='Backdate')
-                     ].groupby(['Tanggal PO'])[['Nomor PO']].nunique().reset_index()
-            df_line = df_tanggal.merge(df_line,how='left',left_on='Tanggal',right_on='Tanggal PO').fillna(0)
-            create_line_chart(df_line, x_column='Tanggal', y_column='Nomor PO', title="DAILY BACKDATE")
-        with col[2]:
-            df_bar = df_eksternal[(df_eksternal["Tanggal PO"] >= pd.Timestamp(start_date)) & (df_eksternal["Tanggal PO"] <= pd.Timestamp(end_date)) & (df_eksternal['PIC Responsible']=='Logistic') 
-                     & (df_eksternal['Kategori PO(Create)-PO(Datang)']=='Backdate')].groupby(['Rute'])[['Nomor PO']].nunique().reset_index()
-            create_percentage_barchart(df_bar, 'Rute', 'Nomor PO')
-        with col[3]:
-            st.write('')
-            col2 = st.columns(3)
-            with col2[0]:
-                st.metric(label="Total", value="{:,.0f}".format(df_eksternal[(df_eksternal["Tanggal PO"] >= pd.Timestamp(start_date)) & (df_eksternal["Tanggal PO"] <= pd.Timestamp(end_date)) & (df_eksternal['PIC Responsible']=='Logistic') 
-                    ]['Nomor PO'].nunique()), delta=None)
-            with col2[1]:
-                st.metric(label="On-Time", value="{:,.0f}".format(df_pie[df_pie['Kategori PO(Create)-PO(Datang)']=='On-Time']['Nomor PO'].values[0]), delta=None)
-            with col2[2]:
-                st.metric(label="Backdate", value="{:,.0f}".format(df_pie[df_pie['Kategori PO(Create)-PO(Datang)']=='Backdate']['Nomor PO'].values[0]), delta=None)
-            
-            st.dataframe(df_eksternal[(df_eksternal["Tanggal PO"] >= pd.Timestamp(start_date)) & (df_eksternal["Tanggal PO"] <= pd.Timestamp(end_date)) & (df_eksternal['PIC Responsible']=='Logistic') 
-                     & (df_eksternal['Kategori PO(Create)-PO(Datang)']=='Backdate')].groupby(['Rute','PO(Create)-PO(Datang) Group'])[['Nomor PO']].nunique().reset_index().pivot(index='Rute',columns='PO(Create)-PO(Datang) Group',values='Nomor PO').reset_index().merge(
-                df_eksternal[(df_eksternal["Tanggal PO"] >= pd.Timestamp(start_date)) & (df_eksternal["Tanggal PO"] <= pd.Timestamp(end_date)) & (df_eksternal['PIC Responsible']=='Logistic') 
-                     & (df_eksternal['Kategori PO(Create)-PO(Datang)']=='Backdate')].groupby(['Rute'])[['Nomor PO']].nunique().reset_index().rename(columns={'Nomor PO':'Total'})
-                     ),
-                         hide_index=True)
-            
-        st.write('Kategori Item: Resto')
-        col = st.columns([1,2,1,2])
-        
-        with col[0]:
-            df_pie = df_eksternal[(df_eksternal["Tanggal PO"] >= pd.Timestamp(start_date)) & (df_eksternal["Tanggal PO"] <= pd.Timestamp(end_date)) & (df_eksternal['PIC Responsible']=='Resto') 
-                     & (df_eksternal['Kategori Item']=='Eksternal Resto')].groupby(['Kategori PO(Create)-PO(Datang)'])[['Nomor PO']].nunique().reset_index()
-            create_pie_chart(df_pie, labels_column='Kategori PO(Create)-PO(Datang)', values_column='Nomor PO', title="OUTGOING BACKDATE")
-        with col[1]:
-            df_line = df_eksternal[(df_eksternal["Tanggal PO"] >= pd.Timestamp(start_date)) & (df_eksternal["Tanggal PO"] <= pd.Timestamp(end_date)) & (df_eksternal['PIC Responsible']=='Resto') 
-                     & (df_eksternal['Kategori PO(Create)-PO(Datang)']=='Backdate') & (df_eksternal['Kategori Item']=='Eksternal Resto')
-                     ].groupby(['Tanggal PO'])[['Nomor PO']].nunique().reset_index()
-            df_line = df_tanggal.merge(df_line,how='left',left_on='Tanggal',right_on='Tanggal PO').fillna(0)
-            create_line_chart(df_line, x_column='Tanggal', y_column='Nomor PO', title="DAILY BACKDATE")
-        with col[2]:
-            df_bar = df_eksternal[(df_eksternal["Tanggal PO"] >= pd.Timestamp(start_date)) & (df_eksternal["Tanggal PO"] <= pd.Timestamp(end_date)) & (df_eksternal['PIC Responsible']=='Resto') 
-                     & (df_eksternal['Kategori PO(Create)-PO(Datang)']=='Backdate') & (df_eksternal['Kategori Item']=='Eksternal Resto')].groupby(['Rute'])[['Nomor PO']].nunique().reset_index()
-            create_percentage_barchart(df_bar, 'Rute', 'Nomor PO')
-        with col[3]:
-            st.write('')
-            col2 = st.columns(3)
-            with col2[0]:
-                st.metric(label="Total", value="{:,.0f}".format(df_eksternal[(df_eksternal["Tanggal PO"] >= pd.Timestamp(start_date)) & (df_eksternal["Tanggal PO"] <= pd.Timestamp(end_date)) & (df_eksternal['PIC Responsible']=='Resto') 
-                    ]['Nomor PO'].nunique()), delta=None)
-            with col2[1]:
-                st.metric(label="On-Time", value="{:,.0f}".format(df_pie[df_pie['Kategori PO(Create)-PO(Datang)']=='On-Time']['Nomor PO'].values[0]), delta=None)
-            with col2[2]:
-                st.metric(label="Backdate", value="{:,.0f}".format(df_pie[df_pie['Kategori PO(Create)-PO(Datang)']=='Backdate']['Nomor PO'].values[0]), delta=None)
-            
-            st.dataframe(df_eksternal[(df_eksternal["Tanggal PO"] >= pd.Timestamp(start_date)) & (df_eksternal["Tanggal PO"] <= pd.Timestamp(end_date)) & (df_eksternal['PIC Responsible']=='Resto') 
-                     & (df_eksternal['Kategori PO(Create)-PO(Datang)']=='Backdate')].groupby(['Rute','PO(Create)-PO(Datang) Group'])[['Nomor PO']].nunique().reset_index().pivot(index='Rute',columns='PO(Create)-PO(Datang) Group',values='Nomor PO').reset_index().merge(
-                df_eksternal[(df_eksternal["Tanggal PO"] >= pd.Timestamp(start_date)) & (df_eksternal["Tanggal PO"] <= pd.Timestamp(end_date)) & (df_eksternal['PIC Responsible']=='Resto') 
-                     & (df_eksternal['Kategori PO(Create)-PO(Datang)']=='Backdate')].groupby(['Rute'])[['Nomor PO']].nunique().reset_index().rename(columns={'Nomor PO':'Total'})
-                     ),
-                         hide_index=True)
+        df_test.loc[:,[x  for x in df_test.columns if 'Diff' in x]] = df_test.loc[:,[x  for x in df_test.columns if 'Diff' in x]].applymap(lambda x: f'{x*100:.2f}%')
+        if len([x  for x in df_test.columns if 'Diff' in x])>1:
+            df_test = df_test.drop(columns=[df_test.columns[-2]])
+        df_month = df_test[[x for x in df_test.columns if x in list_bulan]].replace('',np.nan).replace(0,np.nan).fillna(method='ffill', axis=1).fillna(method='bfill', axis=1)
 
-    if kat_eksternal =='RI(Date)-PO(Datang)':
-        st.markdown('### Kategori RI(Date)-PO(Datang)')
-        st.write('PIC Responsible: Procurement')
-        st.write('Kategori Item: Logistic')
-        col = st.columns([1,2,1,2])
-        
-        with col[0]:
-            df_pie = df_eksternal[(df_eksternal["Tanggal PO"] >= pd.Timestamp(start_date)) & (df_eksternal["Tanggal PO"] <= pd.Timestamp(end_date)) & (df_eksternal['PIC Responsible']=='Logistic') 
-                     ].groupby(['Kategori RI(Date)-PO(Datang)'])[['Nomor PO']].nunique().reset_index()
-            create_pie_chart(df_pie, labels_column='Kategori RI(Date)-PO(Datang)', values_column='Nomor PO', title="OUTGOING BACKDATE")
-        with col[1]:
-            df_line = df_eksternal[(df_eksternal["Tanggal PO"] >= pd.Timestamp(start_date)) & (df_eksternal["Tanggal PO"] <= pd.Timestamp(end_date)) & (df_eksternal['PIC Responsible']=='Logistic') 
-                     & (df_eksternal['Kategori RI(Date)-PO(Datang)']=='Backdate')
-                     ].groupby(['Tanggal PO'])[['Nomor PO']].nunique().reset_index()
-            df_line = df_tanggal.merge(df_line,how='left',left_on='Tanggal',right_on='Tanggal PO').fillna(0)
-            create_line_chart(df_line, x_column='Tanggal', y_column='Nomor PO', title="DAILY BACKDATE")
-        with col[2]:
-            df_bar = df_eksternal[(df_eksternal["Tanggal PO"] >= pd.Timestamp(start_date)) & (df_eksternal["Tanggal PO"] <= pd.Timestamp(end_date)) & (df_eksternal['PIC Responsible']=='Logistic') 
-                     & (df_eksternal['Kategori RI(Date)-PO(Datang)']=='Backdate')].groupby(['Rute'])[['Nomor PO']].nunique().reset_index()
-            create_percentage_barchart(df_bar, 'Rute', 'Nomor PO')
-        with col[3]:
-            st.write('')
-            col2 = st.columns(3)
-            with col2[0]:
-                st.metric(label="Total", value="{:,.0f}".format(df_eksternal[(df_eksternal["Tanggal PO"] >= pd.Timestamp(start_date)) & (df_eksternal["Tanggal PO"] <= pd.Timestamp(end_date)) & (df_eksternal['PIC Responsible']=='Logistic') 
-                    ]['Nomor PO'].nunique()), delta=None)
-            with col2[1]:
-                st.metric(label="On-Time", value="{:,.0f}".format(df_pie[df_pie['Kategori RI(Date)-PO(Datang)']=='On-Time']['Nomor PO'].values[0]), delta=None)
-            with col2[2]:
-                st.metric(label="Backdate", value="{:,.0f}".format(df_pie[df_pie['Kategori RI(Date)-PO(Datang)']=='Backdate']['Nomor PO'].values[0]), delta=None)
-            
-            st.dataframe(df_eksternal[(df_eksternal["Tanggal PO"] >= pd.Timestamp(start_date)) & (df_eksternal["Tanggal PO"] <= pd.Timestamp(end_date)) & (df_eksternal['PIC Responsible']=='Logistic') 
-                     & (df_eksternal['Kategori RI(Date)-PO(Datang)']=='Backdate')].groupby(['Rute','RI(Date)-PO(Datang) Group'])[['Nomor PO']].nunique().reset_index().pivot(index='Rute',columns='RI(Date)-PO(Datang) Group',values='Nomor PO').reset_index().merge(
-                df_eksternal[(df_eksternal["Tanggal PO"] >= pd.Timestamp(start_date)) & (df_eksternal["Tanggal PO"] <= pd.Timestamp(end_date)) & (df_eksternal['PIC Responsible']=='Logistic') 
-                     & (df_eksternal['Kategori RI(Date)-PO(Datang)']=='Backdate')].groupby(['Rute'])[['Nomor PO']].nunique().reset_index().rename(columns={'Nomor PO':'Total'})
-                     ),
-                         hide_index=True)
+        df_month = df_month.mean().apply(lambda x: f'{x:.3f}')
+        if wa_qty =='WEIGHT AVG (PRICE)':     
+            df_test2.loc[:,[x for x in df_test2.columns if x in list_bulan]] = df_test2.loc[:,[x for x in df_test2.columns if x in list_bulan]].applymap(lambda x: f'{x:,.2f}' if isinstance(x, float) else x)
+        if wa_qty =='QUANTITY':     
+            df_test2.loc[:,[x for x in df_test2.columns if x in list_bulan]] = df_test2.loc[:,[x for x in df_test2.columns if x in list_bulan]].applymap(lambda x: f'{x:,.0f}' if isinstance(x, float) else x)
+        st.session_state.filtered_df_month = df_month    
+        st.session_state.filtered_df_test2 = df_test2
+        st.session_state.filtered_df_test = df_test
+        st.session_state.filtered_df_prov = df_prov
+        st.session_state.wa_qty = wa_qty
 
-        st.write('Kategori Item: Resto')
-        col = st.columns([1,2,1,2])
-        
-        with col[0]:
-            df_pie = df_eksternal[(df_eksternal["Tanggal PO"] >= pd.Timestamp(start_date)) & (df_eksternal["Tanggal PO"] <= pd.Timestamp(end_date)) & (df_eksternal['PIC Responsible']=='Resto') 
-                     & (df_eksternal['Kategori Item']=='Eksternal Resto')].groupby(['Kategori RI(Date)-PO(Datang)'])[['Nomor PO']].nunique().reset_index()
-            create_pie_chart(df_pie, labels_column='Kategori RI(Date)-PO(Datang)', values_column='Nomor PO', title="OUTGOING BACKDATE")
-        with col[1]:
-            df_line = df_eksternal[(df_eksternal["Tanggal PO"] >= pd.Timestamp(start_date)) & (df_eksternal["Tanggal PO"] <= pd.Timestamp(end_date)) & (df_eksternal['PIC Responsible']=='Resto') 
-                     & (df_eksternal['Kategori RI(Date)-PO(Datang)']=='Backdate') & (df_eksternal['Kategori Item']=='Eksternal Resto')
-                     ].groupby(['Tanggal PO'])[['Nomor PO']].nunique().reset_index()
-            df_line = df_tanggal.merge(df_line,how='left',left_on='Tanggal',right_on='Tanggal PO').fillna(0)
-            create_line_chart(df_line, x_column='Tanggal', y_column='Nomor PO', title="DAILY BACKDATE")
-        with col[2]:
-            df_bar = df_eksternal[(df_eksternal["Tanggal PO"] >= pd.Timestamp(start_date)) & (df_eksternal["Tanggal PO"] <= pd.Timestamp(end_date)) & (df_eksternal['PIC Responsible']=='Resto') 
-                     & (df_eksternal['Kategori RI(Date)-PO(Datang)']=='Backdate') & (df_eksternal['Kategori Item']=='Eksternal Resto')].groupby(['Rute'])[['Nomor PO']].nunique().reset_index()
-            create_percentage_barchart(df_bar, 'Rute', 'Nomor PO')
-        with col[3]:
-            st.write('')
-            col2 = st.columns(3)
-            with col2[0]:
-                st.metric(label="Total", value="{:,.0f}".format(df_eksternal[(df_eksternal["Tanggal PO"] >= pd.Timestamp(start_date)) & (df_eksternal["Tanggal PO"] <= pd.Timestamp(end_date)) & (df_eksternal['PIC Responsible']=='Resto') 
-                    ]['Nomor PO'].nunique()), delta=None)
-            with col2[1]:
-                st.metric(label="On-Time", value="{:,.0f}".format(df_pie[df_pie['Kategori RI(Date)-PO(Datang)']=='On-Time']['Nomor PO'].values[0]), delta=None)
-            with col2[2]:
-                st.metric(label="Backdate", value="{:,.0f}".format(df_pie[df_pie['Kategori RI(Date)-PO(Datang)']=='Backdate']['Nomor PO'].values[0]), delta=None)
-            
-            st.dataframe(df_eksternal[(df_eksternal["Tanggal PO"] >= pd.Timestamp(start_date)) & (df_eksternal["Tanggal PO"] <= pd.Timestamp(end_date)) & (df_eksternal['PIC Responsible']=='Resto') 
-                     & (df_eksternal['Kategori RI(Date)-PO(Datang)']=='Backdate')].groupby(['Rute','RI(Date)-PO(Datang) Group'])[['Nomor PO']].nunique().reset_index().pivot(index='Rute',columns='RI(Date)-PO(Datang) Group',values='Nomor PO').reset_index().merge(
-                df_eksternal[(df_eksternal["Tanggal PO"] >= pd.Timestamp(start_date)) & (df_eksternal["Tanggal PO"] <= pd.Timestamp(end_date)) & (df_eksternal['PIC Responsible']=='Resto') 
-                     & (df_eksternal['Kategori RI(Date)-PO(Datang)']=='Backdate')].groupby(['Rute'])[['Nomor PO']].nunique().reset_index().rename(columns={'Nomor PO':'Total'})
-                     ),
-                         hide_index=True)
+if ('filtered_df_test' in st.session_state) :
+    create_line_chart(st.session_state.filtered_df_month)
+    plot_grouped_barchart(st.session_state.filtered_df_test2)
+    prov = pd.read_csv('Dataset/Master/prov.csv')    
+    barang = st.multiselect("NAMA BARANG:", ['All']+df_test.sort_values('Kode #')['Filter Barang'].unique().tolist(), default = ['All'])
 
-    if kat_eksternal =='RI(Date)-RI(Create)':
-        st.markdown('### Kategori RI(Date)-RI(Create)')
-        st.write('PIC Responsible: Procurement')
-        st.write('Kategori Item: Logistic')
-        col = st.columns([1,2,1,2])
-        
-        with col[0]:
-            df_pie = df_eksternal2[(df_eksternal2["Tanggal PO"] >= pd.Timestamp(start_date)) & (df_eksternal2["Tanggal PO"] <= pd.Timestamp(end_date)) & (df_eksternal2['PIC Responsible']=='Logistic') 
-                     ].groupby(['Kategori RI(Date)-RI(Create)'])[['Nomor PO+RI']].nunique().reset_index()
-            create_pie_chart(df_pie, labels_column='Kategori RI(Date)-RI(Create)', values_column='Nomor PO+RI', title="OUTGOING BACKDATE")
-        with col[1]:
-            df_line = df_eksternal2[(df_eksternal2["Tanggal PO"] >= pd.Timestamp(start_date)) & (df_eksternal2["Tanggal PO"] <= pd.Timestamp(end_date)) & (df_eksternal2['PIC Responsible']=='Logistic') 
-                     & (df_eksternal2['Kategori RI(Date)-RI(Create)']=='Backdate')
-                     ].groupby(['Tanggal PO'])[['Nomor PO+RI']].nunique().reset_index()
-            df_line = df_tanggal.merge(df_line,how='left',left_on='Tanggal',right_on='Tanggal PO').fillna(0)
-            create_line_chart(df_line, x_column='Tanggal', y_column='Nomor PO+RI', title="DAILY BACKDATE")
-        with col[2]:
-            df_bar = df_eksternal2[(df_eksternal2["Tanggal PO"] >= pd.Timestamp(start_date)) & (df_eksternal2["Tanggal PO"] <= pd.Timestamp(end_date)) & (df_eksternal2['PIC Responsible']=='Logistic') 
-                     & (df_eksternal2['Kategori RI(Date)-RI(Create)']=='Backdate')].groupby(['Rute'])[['Nomor PO+RI']].nunique().reset_index()
-            create_percentage_barchart(df_bar, 'Rute', 'Nomor PO+RI')
-        with col[3]:
-            st.write('')
-            col2 = st.columns(3)
-            with col2[0]:
-                st.metric(label="Total", value="{:,.0f}".format(df_eksternal2[(df_eksternal2["Tanggal PO"] >= pd.Timestamp(start_date)) & (df_eksternal2["Tanggal PO"] <= pd.Timestamp(end_date)) & (df_eksternal2['PIC Responsible']=='Logistic') 
-                    ]['Nomor PO+RI'].nunique()), delta=None)
-            with col2[1]:
-                st.metric(label="On-Time", value="{:,.0f}".format(df_pie[df_pie['Kategori RI(Date)-RI(Create)']=='On-Time']['Nomor PO+RI'].values[0]), delta=None)
-            with col2[2]:
-                st.metric(label="Backdate", value="{:,.0f}".format(df_pie[df_pie['Kategori RI(Date)-RI(Create)']=='Backdate']['Nomor PO+RI'].values[0]), delta=None)
-            
-            st.dataframe(df_eksternal2[(df_eksternal2["Tanggal PO"] >= pd.Timestamp(start_date)) & (df_eksternal2["Tanggal PO"] <= pd.Timestamp(end_date)) & (df_eksternal2['PIC Responsible']=='Logistic') 
-                     & (df_eksternal2['Kategori RI(Date)-RI(Create)']=='Backdate')].groupby(['Rute','RI(Date)-RI(Create) Group'])[['Nomor PO+RI']].nunique().reset_index().pivot(index='Rute',columns='RI(Date)-RI(Create) Group',values='Nomor PO+RI').reset_index().merge(
-                df_eksternal2[(df_eksternal2["Tanggal PO"] >= pd.Timestamp(start_date)) & (df_eksternal2["Tanggal PO"] <= pd.Timestamp(end_date)) & (df_eksternal2['PIC Responsible']=='Logistic') 
-                     & (df_eksternal2['Kategori RI(Date)-RI(Create)']=='Backdate')].groupby(['Rute'])[['Nomor PO+RI']].nunique().reset_index().rename(columns={'Nomor PO+RI':'Total'})
-                     ),
-                         hide_index=True)
-            
-        st.write('Kategori Item: Resto')
-        col = st.columns([1,2,1,2])
-        
-        with col[0]:
-            df_pie = df_eksternal2[(df_eksternal2["Tanggal PO"] >= pd.Timestamp(start_date)) & (df_eksternal2["Tanggal PO"] <= pd.Timestamp(end_date)) & (df_eksternal2['PIC Responsible']=='Resto') 
-                     & (df_eksternal2['Kategori Item']=='Eksternal Resto')].groupby(['Kategori RI(Date)-RI(Create)'])[['Nomor PO+RI']].nunique().reset_index()
-            create_pie_chart(df_pie, labels_column='Kategori RI(Date)-RI(Create)', values_column='Nomor PO+RI', title="OUTGOING BACKDATE")
-        with col[1]:
-            df_line = df_eksternal2[(df_eksternal2["Tanggal PO"] >= pd.Timestamp(start_date)) & (df_eksternal2["Tanggal PO"] <= pd.Timestamp(end_date)) & (df_eksternal2['PIC Responsible']=='Resto') 
-                     & (df_eksternal2['Kategori RI(Date)-RI(Create)']=='Backdate') & (df_eksternal2['Kategori Item']=='Eksternal Resto')
-                     ].groupby(['Tanggal PO'])[['Nomor PO+RI']].nunique().reset_index()
-            df_line = df_tanggal.merge(df_line,how='left',left_on='Tanggal',right_on='Tanggal PO').fillna(0)
-            create_line_chart(df_line, x_column='Tanggal', y_column='Nomor PO+RI', title="DAILY BACKDATE")
-        with col[2]:
-            df_bar = df_eksternal2[(df_eksternal2["Tanggal PO"] >= pd.Timestamp(start_date)) & (df_eksternal2["Tanggal PO"] <= pd.Timestamp(end_date)) & (df_eksternal2['PIC Responsible']=='Resto') 
-                     & (df_eksternal2['Kategori RI(Date)-RI(Create)']=='Backdate') & (df_eksternal2['Kategori Item']=='Eksternal Resto')].groupby(['Rute'])[['Nomor PO+RI']].nunique().reset_index()
-            create_percentage_barchart(df_bar, 'Rute', 'Nomor PO+RI')
-        with col[3]:
-            st.write('')
-            col2 = st.columns(3)
-            with col2[0]:
-                st.metric(label="Total", value="{:,.0f}".format(df_eksternal2[(df_eksternal2["Tanggal PO"] >= pd.Timestamp(start_date)) & (df_eksternal2["Tanggal PO"] <= pd.Timestamp(end_date)) & (df_eksternal2['PIC Responsible']=='Resto') 
-                    ]['Nomor PO+RI'].nunique()), delta=None)
-            with col2[1]:
-                st.metric(label="On-Time", value="{:,.0f}".format(df_pie[df_pie['Kategori RI(Date)-RI(Create)']=='On-Time']['Nomor PO+RI'].values[0]), delta=None)
-            with col2[2]:
-                st.metric(label="Backdate", value="{:,.0f}".format(df_pie[df_pie['Kategori RI(Date)-RI(Create)']=='Backdate']['Nomor PO+RI'].values[0]), delta=None)
-            
-            st.dataframe(df_eksternal2[(df_eksternal2["Tanggal PO"] >= pd.Timestamp(start_date)) & (df_eksternal2["Tanggal PO"] <= pd.Timestamp(end_date)) & (df_eksternal2['PIC Responsible']=='Resto') 
-                     & (df_eksternal2['Kategori RI(Date)-RI(Create)']=='Backdate')].groupby(['Rute','RI(Date)-RI(Create) Group'])[['Nomor PO+RI']].nunique().reset_index().pivot(index='Rute',columns='RI(Date)-RI(Create) Group',values='Nomor PO+RI').reset_index().merge(
-                df_eksternal2[(df_eksternal2["Tanggal PO"] >= pd.Timestamp(start_date)) & (df_eksternal2["Tanggal PO"] <= pd.Timestamp(end_date)) & (df_eksternal2['PIC Responsible']=='Resto') 
-                     & (df_eksternal2['Kategori RI(Date)-RI(Create)']=='Backdate')].groupby(['Rute'])[['Nomor PO+RI']].nunique().reset_index().rename(columns={'Nomor PO+RI':'Total'})
-                     ),
-                         hide_index=True)
+    
+    if 'All' in barang:
+        df_test = st.session_state.filtered_df_test.drop(columns='Filter Barang')
+        df_prov = st.session_state.filtered_df_prov
+    if 'All' not in barang:
+        df_test = st.session_state.filtered_df_test[st.session_state.filtered_df_test['Filter Barang'].isin(barang)].drop(columns='Filter Barang')
+        df_prov = st.session_state.filtered_df_prov[st.session_state.filtered_df_prov['Filter Barang'].isin(barang)]
+
+    if wa_qty =='WEIGHT AVG (PRICE)':
+        df_prov = df_prov.groupby(['Provinsi'])[['WEIGHT AVG (PRICE)']].mean().reset_index()
+        df_test.loc[:,[x for x in df_test.columns if x in list_bulan]] = df_test.loc[:,[x for x in df_test.columns if x in list_bulan]].applymap(lambda x: f'{x:.2f}' if isinstance(x, float) else x)
+
+    if wa_qty =='QUANTITY':
+        df_prov = df_prov.groupby(['Provinsi'])[['QUANTITY']].sum().reset_index()
+        df_test.loc[:,[x for x in df_test.columns if x in list_bulan]] = df_test.loc[:,[x for x in df_test.columns if x in list_bulan]].applymap(lambda x: f'{x:.0f}' if isinstance(x, float) else x)
+
+    df_prov['Provinsi'] = df_prov['Provinsi'].str.upper().replace('BANTEN','PROBANTEN')
+    #df_prov
+    #create_sales_map_chart(prov.merge(df_prov,how='left',left_on='properties',right_on='Provinsi').drop(columns='Provinsi').fillna(0))
+    m = folium.Map(location=[-0.4471383, 117.1655734], zoom_start=5)
+    
+    # Gabungkan data GeoJSON dengan DataFrame df_prov berdasarkan provinsi
+    # Asumsikan 'Propinsi' adalah kolom di GeoJSON yang berisi nama provinsi yang sama dengan kolom di df_prov
+    
+    # Pastikan bahwa nama kolom 'Provinsi' di df_prov sama dengan 'Propinsi' di GeoJSON
+    #df_prov['Provinsi'] = df_prov['Provinsi'].str.title()  # Menyamakannya dengan format nama di GeoJSON
+    
+    # Gabungkan df_prov ke dalam GeoJSON berdasarkan 'Provinsi' dan 'Propinsi'
+    geojson_data_with_prices = []
+    for feature in geojson_data['features']:
+        provinsi = feature['properties']['Propinsi']
+        harga = df_prov.loc[df_prov['Provinsi'] == provinsi, wa_qty].values
+        if harga.size>0:
+            feature['properties'][wa_qty] = float(harga[0])
+        else:
+            feature['properties'][wa_qty] = None
+        geojson_data_with_prices.append(feature)
+    
+    geojson_data['features'] = geojson_data_with_prices
+    
+    # Menambahkan choropleth dengan data harga
+    folium.Choropleth(
+        geo_data=geojson_data,
+        name='choropleth',
+        data=df_prov,
+        columns=['Provinsi', wa_qty],
+        key_on='properties.Propinsi',  # Sesuaikan dengan nama properti di GeoJSON
+        fill_color='YlOrRd',  # Warna gradient
+        fill_opacity=0.7,
+        line_opacity=0.05,
+        legend_name=wa_qty,
+    ).add_to(m)
+    
+    # Menambahkan GeoJson dengan Tooltip
+    folium.GeoJson(
+        geojson_data,
+        name="Provinsi",
+        tooltip=GeoJsonTooltip(
+            fields=["Propinsi", wa_qty],  # Sesuaikan dengan kolom yang ada pada GeoJSON
+            aliases=["Provinsi:", f"{wa_qty}:"],  # Label yang akan ditampilkan di tooltip
+            localize=True
+        ),
+        style_function=lambda x: {
+            #'fillOpacity': 0.0 if x['properties'][wa_qty] is None else 0.7,  # Set opasitas area
+            'weight': 0.2,  # Menghilangkan garis perbatasan
+            'color': 'white'  # Menghilangkan warna garis perbatasan
+        }
+    ).add_to(m)
+    folium.TileLayer('cartodbpositron', control=False).add_to(m)
+    # Menambahkan kontrol layer
+    folium.LayerControl().add_to(m)
+    
+    # Menampilkan peta
+    st.markdown("""
+    <style>
+        .streamlit-expanderHeader {
+            font-size: 18px;
+        }
+        iframe {
+            width: 100%;  /* Mengatur lebar iframe agar mengikuti lebar layar */
+            height: 400px;  /* Mengatur tinggi iframe */
+        }
+    </style>
+    """, unsafe_allow_html=True)
+    folium_static(m)
+    df_test.iloc[:,2:-1] = df_test.iloc[:,2:-1].replace('',0).astype(float)
+    df_test = df_test.style.format(lambda x: format_number(x)).background_gradient(cmap='Reds', axis=1, subset=df_test.columns[2:-1])
+    st.dataframe(df_test, use_container_width=True, hide_index=True)
+    
+    vendor = st.multiselect("PEMASOK:", ['All']+df_vendor[df_vendor['Filter Barang'].isin(df_vendor['Filter Barang'].unique() if barang==['All'] else barang)].sort_values('Pemasok')['Pemasok'].unique().tolist(), default = ['All'])
+    
+    df_test = df_vendor[(df_vendor['Filter Barang'].isin(df_vendor['Filter Barang'].unique() if barang==['All'] else barang)) & (df_vendor['Pemasok'].isin(df_vendor['Pemasok'].unique() if vendor==['All'] else vendor))]
+    df_test = df_test.pivot(index=['Pemasok','Kode #','Nama Barang'],columns='Month',values=wa_qty).fillna('').reset_index()
+
+    if len(bulan)>=3:
+        df_test[f'Diff {bulan[-3]} - {bulan[-2]}'] = df_test.apply(lambda row: 0 if ((row[bulan[-2]] == '') or (row[bulan[-3]]=='') or (row[bulan[-3]]==0)) else ((row[bulan[-2]] - row[bulan[-3]]) / row[bulan[-3]]), axis=1)
+        df_test[f'Diff {bulan[-2]} - {bulan[-1]}'] = df_test.apply(lambda row: 0 if ((row[bulan[-1]] == '') or (row[bulan[-2]]=='') or (row[bulan[-2]]==0)) else ((row[bulan[-1]] - row[bulan[-2]]) / row[bulan[-2]]), axis=1)
+        df_test = df_test.sort_values(df_test.columns[-1],ascending=False) 
+        #df_test.loc[:,df_test.columns[-2:]] = df_test.loc[:,df_test.columns[-2:]].applymap(lambda x: f'{x*100:.2f}%')
+    if len(bulan)==2:
+        df_test[f'Diff {bulan[-2]} - {bulan[-1]}'] = df_test.apply(lambda row: 0 if ((row[bulan[-1]] == '') or (row[bulan[-2]]=='') or (row[bulan[-2]]==0)) else ((row[bulan[-1]] - row[bulan[-2]]) / row[bulan[-2]]), axis=1)
+        df_test = df_test.sort_values(df_test.columns[-1],ascending=False)
+        #df_test.loc[:,df_test.columns[-1]] = df_test.loc[:,df_test.columns[-1:]].apply(lambda x: f'{x*100:.2f}%')   
+
+    if wa_qty =='WEIGHT AVG (PRICE)':
+        df_test.loc[:,[x for x in df_test.columns if x in list_bulan]] = df_test.loc[:,[x for x in df_test.columns if x in list_bulan]].applymap(lambda x: f'{x:.2f}' if isinstance(x, float) else x)
+
+    if wa_qty =='QUANTITY':
+        df_test.loc[:,[x for x in df_test.columns if x in list_bulan]] = df_test.loc[:,[x for x in df_test.columns if x in list_bulan]].applymap(lambda x: f'{x:.0f}' if isinstance(x, float) else x)
+    
+    df_test.loc[:,[x  for x in df_test.columns if 'Diff' in x]] = df_test.loc[:,[x  for x in df_test.columns if 'Diff' in x]].applymap(lambda x: f'{x*100:.2f}%')
+    if len([x  for x in df_test.columns if 'Diff' in x])>1:
+        df_test = df_test.drop(columns=[df_test.columns[-2]])
+    #st.dataframe(df_test)
+    df_test.iloc[:,3:-1] = df_test.iloc[:,3:-1].replace('',0).astype(float)
+    df_test = df_test.style.format(lambda x:format_number(x)).background_gradient(cmap='Reds', axis=1, subset=df_test.columns[3:-1])
+    st.dataframe(df_test, use_container_width=True, hide_index=True)
+
+#    if barang !=['All']:
+    kat_vendor = st.multiselect("KATEGORI PEMASOK:", ['All']+df_vendor[df_vendor['Filter Barang'].isin(df_vendor['Filter Barang'].unique() if barang==['All'] else barang)].sort_values('Kategori Pemasok')['Kategori Pemasok'].unique().tolist(), default = ['All'])
+    
+    df_vendor = df_vendor[(df_vendor['Filter Barang'].isin(df_vendor['Filter Barang'].unique() if barang==['All'] else barang)) & (df_vendor['Kategori Pemasok'].isin(df_vendor['Kategori Pemasok'].unique() if kat_vendor==['All'] else kat_vendor))]
+    df_vendor = df_vendor.groupby(['Month','Kategori Pemasok','Kode #','Nama Barang']).agg({'min':'min','max':'max'}).reset_index().dropna(subset=['min','max'])  
+    df_vendor['Month'] = pd.Categorical(df_vendor['Month'], categories=list_bulan, ordered=True)
+    df_vendor = df_vendor.sort_values('Month')
+    df_vendor[f'Diff Min-Max {bulan[-1]}'] =  ((df_vendor['max']-df_vendor['min'])/df_vendor['min'])
+    df_vendor['Range'] = df_vendor['min'].apply(lambda x: f'{x:,.2f}').fillna('') + '-' + df_vendor['max'].apply(lambda x: f'{x:,.2f}').fillna('')
+    
+    df_vendor = df_vendor.pivot(index=['Kategori Pemasok','Kode #','Nama Barang'], columns='Month',values='Range').fillna('').reset_index().sort_values(['Kode #','Kategori Pemasok']).merge(
+                df_vendor[df_vendor['Month']==bulan[-1]][['Kategori Pemasok','Kode #',f'Diff Min-Max {bulan[-1]}']].dropna(subset=f'Diff Min-Max {bulan[-1]}'), how='left').sort_values(f'Diff Min-Max {bulan[-1]}', ascending=False)
+    df_vendor[f'Diff Min-Max {bulan[-1]}'] = df_vendor[f'Diff Min-Max {bulan[-1]}'].fillna(0).apply(lambda x: f'{x*100:.2f}%')
+    st.dataframe(df_vendor, use_container_width=True, hide_index=True)
