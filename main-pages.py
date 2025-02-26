@@ -19,6 +19,3 @@ pg = st.navigation({'Dashboard':[
                     page_6, page_7, page_8
                    ]},expanded=True)
 pg.run()
-
-
-
